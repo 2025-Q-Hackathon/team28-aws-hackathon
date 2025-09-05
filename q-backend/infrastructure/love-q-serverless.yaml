@@ -73,8 +73,8 @@ Resources:
                   - s3:DeleteObject
                 Resource: 
                   - '*'
-                  - !Sub '${FileStorageBucket}'
-                  - !Sub '${FileStorageBucket}/*'
+                  - !Sub 'arn:aws:s3:::${FileStorageBucket}'
+                  - !Sub 'arn:aws:s3:::${FileStorageBucket}/*'
 
   # API Gateway
   ApiGateway:
