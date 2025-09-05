@@ -60,7 +60,7 @@ Resources:
                 Action:
                   - dsql:DbConnect
                   - dsql:DbConnectAdmin
-                Resource: !GetAtt DSQLCluster.ClusterArn
+                Resource: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
         - PolicyName: BedrockS3Access
           PolicyDocument:
             Version: '2012-10-17'
@@ -98,7 +98,7 @@ Resources:
               return {'statusCode': 200, 'body': json.dumps('Chat Analysis with DSQL')}
       Environment:
         Variables:
-          DSQL_CLUSTER_ARN: !GetAtt DSQLCluster.ClusterArn
+          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
           S3_BUCKET: !Ref FileStorageBucket
 
   ResponseGenerationFunction:
@@ -116,7 +116,7 @@ Resources:
               return {'statusCode': 200, 'body': json.dumps('Response Generation with DSQL')}
       Environment:
         Variables:
-          DSQL_CLUSTER_ARN: !GetAtt DSQLCluster.ClusterArn
+          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
 
   FileUploadFunction:
     Type: AWS::Lambda::Function
@@ -133,17 +133,17 @@ Resources:
       Environment:
         Variables:
           S3_BUCKET: !Ref FileStorageBucket
-          DSQL_CLUSTER_ARN: !GetAtt DSQLCluster.ClusterArn
+          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
 
 Outputs:
   DSQLClusterArn:
     Description: DSQL Cluster ARN
-    Value: !GetAtt DSQLCluster.ClusterArn
+    Value: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
     Export:
       Name: !Sub love-q-dsql-cluster-${Environment}
 
   DSQLClusterEndpoint:
-    Description: DSQL Cluster Endpoint
+    Description: DSQL Cluster Endpoint  
     Value: !GetAtt DSQLCluster.Endpoint
     Export:
       Name: !Sub love-q-dsql-endpoint-${Environment}
