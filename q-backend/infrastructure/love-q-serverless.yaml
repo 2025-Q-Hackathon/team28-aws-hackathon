@@ -73,6 +73,7 @@ Resources:
                   - s3:DeleteObject
                 Resource: 
                   - '*'
+                  - !Sub '${FileStorageBucket}'
                   - !Sub '${FileStorageBucket}/*'
 
   # API Gateway
@@ -144,7 +145,7 @@ Outputs:
 
   DSQLClusterEndpoint:
     Description: DSQL Cluster Endpoint  
-    Value: !Sub '${DSQLCluster}.dsql.${AWS::Region}.on.aws'
+    Value: !GetAtt DSQLCluster.Endpoint
     Export:
       Name: !Sub love-q-dsql-endpoint-${Environment}
 
