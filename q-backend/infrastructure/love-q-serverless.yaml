@@ -143,11 +143,11 @@ Outputs:
     Export:
       Name: !Sub love-q-dsql-cluster-${Environment}
 
-  DSQLClusterEndpoint:
-    Description: DSQL Cluster Endpoint  
-    Value: !Sub '${DSQLCluster}.dsql.${AWS::Region}.on.aws'
+  DSQLClusterName:
+    Description: DSQL Cluster Name
+    Value: !Ref DSQLCluster
     Export:
-      Name: !Sub love-q-dsql-endpoint-${Environment}
+      Name: !Sub love-q-dsql-cluster-name-${Environment}
 
   ApiGatewayUrl:
     Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod
