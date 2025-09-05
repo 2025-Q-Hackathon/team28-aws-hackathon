@@ -60,7 +60,7 @@ Resources:
                 Action:
                   - dsql:DbConnect
                   - dsql:DbConnectAdmin
-                Resource: !GetAtt DSQLCluster.ClusterArn
+                Resource: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
         - PolicyName: BedrockS3Access
           PolicyDocument:
             Version: '2012-10-17'
@@ -73,7 +73,8 @@ Resources:
                   - s3:DeleteObject
                 Resource: 
                   - '*'
-                  - !Sub '${FileStorageBucket}/*'
+                  - !Sub 'arn:aws:s3:::${FileStorageBucket}'
+                  - !Sub 'arn:aws:s3:::${FileStorageBucket}/*'
 
   # API Gateway
   ApiGateway:
@@ -98,7 +99,7 @@ Resources:
               return {'statusCode': 200, 'body': json.dumps('Chat Analysis with DSQL')}
       Environment:
         Variables:
-          DSQL_CLUSTER_ARN: !GetAtt DSQLCluster.ClusterArn
+          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
           S3_BUCKET: !Ref FileStorageBucket
 
   ResponseGenerationFunction:
@@ -116,7 +117,7 @@ Resources:
               return {'statusCode': 200, 'body': json.dumps('Response Generation with DSQL')}
       Environment:
         Variables:
-          DSQL_CLUSTER_ARN: !GetAtt DSQLCluster.ClusterArn
+          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
 
   FileUploadFunction:
     Type: AWS::Lambda::Function
@@ -133,20 +134,20 @@ Resources:
       Environment:
         Variables:
           S3_BUCKET: !Ref FileStorageBucket
-          DSQL_CLUSTER_ARN: !GetAtt DSQLCluster.ClusterArn
+          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
 
 Outputs:
   DSQLClusterArn:
     Description: DSQL Cluster ARN
-    Value: !GetAtt DSQLCluster.ClusterArn
+    Value: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
     Export:
       Name: !Sub love-q-dsql-cluster-${Environment}
 
-  DSQLClusterEndpoint:
-    Description: DSQL Cluster Endpoint
-    Value: !GetAtt DSQLCluster.Endpoint
+  DSQLClusterName:
+    Description: DSQL Cluster Name
+    Value: !Ref DSQLCluster
     Export:
-      Name: !Sub love-q-dsql-endpoint-${Environment}
+      Name: !Sub love-q-dsql-cluster-name-${Environment}
 
   ApiGatewayUrl:
     Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod
