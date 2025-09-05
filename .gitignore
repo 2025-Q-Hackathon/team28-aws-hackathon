@@ -1,0 +1,71 @@
+# Dependencies
+node_modules/
+*/node_modules/
+
+# Next.js
+frontend/.next/
+frontend/out/
+frontend/.env.local
+frontend/.env*.local
+
+# Build outputs
+*.log
+*.tgz
+*.tar.gz
+dist/
+build/
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# AWS
+.aws/
+*.zip
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.env
+.venv
+
+# Lambda deployment packages
+q-backend/src/lambda/*.zip
+q-backend/deployment-packages/
+
+# CloudFormation
+*.template
+*-template.yaml
+
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Runtime
+.serverless/
+.terraform/
+
+# Temporary files
+*.tmp
+*.temp
