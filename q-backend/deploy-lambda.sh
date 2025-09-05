@@ -1,7 +1,7 @@
 #!/bin/bash
 
 ENVIRONMENT=${1:-dev}
-REGION=${2:-ap-northeast-2}
+REGION=${2:-us-east-1}
 
 echo "🚀 Deploying Lambda functions..."
 

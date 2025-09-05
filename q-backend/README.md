@@ -33,7 +33,7 @@ q-backend/
 ### 1. 인프라 배포
 ```bash
 cd infrastructure
-./deploy-serverless.sh dev ap-northeast-2 "your-db-password"
+./deploy-serverless.sh dev us-east-1 "your-db-password"
 ```
 
 ### 2. 데이터베이스 초기화
@@ -43,7 +43,7 @@ mysql -h <RDS_ENDPOINT> -u admin -p < src/database/schema.sql
 
 ### 3. Lambda 함수 배포
 ```bash
-./deploy-lambda.sh dev ap-northeast-2
+./deploy-lambda.sh dev us-east-1
 ```
 
 ## 🔧 API 엔드포인트

@@ -21,7 +21,7 @@ Love Q 서비스를 위한 AWS DSQL 기반 완전 서버리스 인프라
 
 ### 1. DSQL 인프라 배포
 ```bash
-./deploy-dsql.sh dev ap-northeast-2
+./deploy-dsql.sh dev us-east-1
 ```
 
 ### 2. 데이터베이스 초기화
@@ -34,7 +34,7 @@ aws dsql execute-statement \
 
 ### 3. Lambda 함수 배포
 ```bash
-../deploy-lambda.sh dev ap-northeast-2
+../deploy-lambda.sh dev us-east-1
 ```
 
 ## 🔧 DSQL 특장점
