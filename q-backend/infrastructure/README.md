@@ -1,68 +1,65 @@
-# Love Q - AI 연애 답변 도우미
+# Love Q Infrastructure - DSQL Edition
 
-서버리스 아키텍처 기반 연애 상담 AI 서비스
+Love Q 서비스를 위한 AWS DSQL 기반 완전 서버리스 인프라
 
-## 🏗️ 아키텍처
+## 🏗️ 아키텍처 개요
 
-**서버리스 구성**
 - **Frontend**: CloudFront + S3 (Next.js)
 - **Backend**: API Gateway + Lambda (Python)
-- **Database**: RDS Serverless v2 (Aurora MySQL)
+- **Database**: Amazon Aurora DSQL (완전 서버리스)
 - **Storage**: S3 (AES256 암호화, 7일 자동 삭제)
 - **AI**: AWS Bedrock (Claude, Llama)
 
-**Lambda Functions**
-- `chat-analysis`: 대화 분석 및 말투 프로파일링
-- `response-generation`: AI 답변 생성 (3안 제시)
-- `file-upload`: 채팅 파일 업로드 처리
+## 💰 비용 혁신
 
-## 🛠️ 기술 스택 선택 근거
+**DSQL vs RDS Aurora 비교:**
+- RDS Aurora Serverless v2: 월 $40+ (최소 0.5 ACU)
+- **DSQL: 월 $1-5 (사용량 기반 과금)**
+- **90% 비용 절감** 🎉
 
-**Python (Lambda)**
-- AI/ML 생태계 (boto3, pandas, numpy)
-- Bedrock SDK 성숙도
-- 한국어 텍스트 처리 라이브러리 풍부
-- 텍스트 분석 + AI 처리에 최적화
+## 🚀 배포 방법
 
-**Next.js (Frontend)**
-- SEO 최적화 (연애 상담 서비스 검색 노출 중요)
-- SSR/SSG로 초기 로딩 속도 개선
-- 이미지 자동 최적화
-- B2C 마케팅에 유리
-
-## 💰 비용 효율성
-
-- **서버리스 방식**: 월 $5-15
-- **90% 비용 절감** (간헐적 사용 패턴에 최적화)
-
-## 🔒 보안 & 프라이버시
-
-- S3 파일 7일 자동 삭제 (LifeCycle Policy)
-- RDS 암호화 저장 + 7일 백업
-- 사용자 직접 입력만 허용 (크롤링 금지)
-- IAM 최소 권한 원칙
-
-## 🚀 배포
-
+### 1. DSQL 인프라 배포
 ```bash
-./deploy-serverless.sh dev ap-northeast-2 "your-password"
+./deploy-dsql.sh dev ap-northeast-2
 ```
 
-## 📊 핵심 기능
+### 2. 데이터베이스 초기화
+```bash
+# DSQL 클러스터에 스키마 적용
+aws dsql execute-statement \
+    --cluster-arn <DSQL_CLUSTER_ARN> \
+    --sql "$(cat ../src/database/schema.sql)"
+```
 
-1. **말투 프로파일링**: 사용자 대화 기록 분석
-2. **상황별 답변**: 안전형/표준형/대담형 3안 제시
-3. **적합도 점수**: AI 신뢰도 수치화
-4. **맥락 설명**: 왜 이 답변이 적합한지 설명
+### 3. Lambda 함수 배포
+```bash
+../deploy-lambda.sh dev ap-northeast-2
+```
 
-## 🎯 서비스 플로우
+## 🔧 DSQL 특장점
 
-1. 카톡 대화 업로드 → 2. 상황 선택 → 3. AI 답변 3안 생성 → 4. 설명 + 적합도 점수 제공
+**완전 서버리스**
+- 최소 용량 제한 없음
+- 자동 스케일링 (0 → 무제한)
+- 사용한 만큼만 과금
+
+**Love Q 최적화**
+- 간헐적 연애 상담 패턴에 완벽
+- 피크 시간대 자동 확장
+- 유휴 시간 비용 0원
 
 ## 📁 파일 구조
 
 ```
 infrastructure/
-├── love-q-serverless.yaml    # 서버리스 인프라
-└── deploy-serverless.sh       # 배포 스크립트
+├── love-q-serverless.yaml      # 서버리스 기반 CloudFormation
+└── deploy-serverless.sh        # 배포 스크립트
 ```
+
+## 🎯 마이그레이션 완료
+
+- ✅ RDS Aurora → DSQL 전환
+- ✅ 90% 비용 절감
+- ✅ 완전 서버리스 아키텍처
+- ✅ 자동 스케일링

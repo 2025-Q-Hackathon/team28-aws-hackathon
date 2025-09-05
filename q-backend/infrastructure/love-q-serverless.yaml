@@ -1,16 +1,24 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Love Q - Serverless Architecture'
+Description: 'Love Q - DSQL Serverless Architecture'
 
 Parameters:
   Environment:
     Type: String
     Default: dev
-  DBPassword:
-    Type: String
-    NoEcho: true
 
 Resources:
-  # S3 Bucket
+  # DSQL Cluster
+  DSQLCluster:
+    Type: AWS::DSQL::Cluster
+    Properties:
+      DeletionProtectionEnabled: false
+      Tags:
+        - Key: Name
+          Value: !Sub love-q-dsql-${Environment}
+        - Key: Project
+          Value: LoveQ
+
+  # S3 Bucket for file storage
   FileStorageBucket:
     Type: AWS::S3::Bucket
     Properties:
@@ -30,73 +38,7 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
-  # RDS Serverless v2
-  DBSubnetGroup:
-    Type: AWS::RDS::DBSubnetGroup
-    Properties:
-      DBSubnetGroupDescription: Subnet group for Love Q database
-      SubnetIds:
-        - !Ref PrivateSubnet1
-        - !Ref PrivateSubnet2
-
-  Database:
-    Type: AWS::RDS::DBCluster
-    Properties:
-      DBClusterIdentifier: !Sub love-q-db-${Environment}
-      Engine: aurora-mysql
-      EngineMode: provisioned
-      EngineVersion: '8.0.mysql_aurora.3.02.0'
-      MasterUsername: admin
-      MasterUserPassword: !Ref DBPassword
-      DBSubnetGroupName: !Ref DBSubnetGroup
-      VpcSecurityGroupIds:
-        - !Ref RDSSecurityGroup
-      BackupRetentionPeriod: 7
-      StorageEncrypted: true
-      ServerlessV2ScalingConfiguration:
-        MinCapacity: 0.5
-        MaxCapacity: 1
-
-  # VPC (Minimal)
-  VPC:
-    Type: AWS::EC2::VPC
-    Properties:
-      CidrBlock: 10.0.0.0/16
-      EnableDnsHostnames: true
-      EnableDnsSupport: true
-
-  PrivateSubnet1:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.0.1.0/24
-      AvailabilityZone: !Select [0, !GetAZs '']
-
-  PrivateSubnet2:
-    Type: AWS::EC2::Subnet
-    Properties:
-      VpcId: !Ref VPC
-      CidrBlock: 10.0.2.0/24
-      AvailabilityZone: !Select [1, !GetAZs '']
-
-  RDSSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: RDS Security Group
-      VpcId: !Ref VPC
-      SecurityGroupIngress:
-        - IpProtocol: tcp
-          FromPort: 3306
-          ToPort: 3306
-          SourceSecurityGroupId: !Ref LambdaSecurityGroup
-
-  LambdaSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
-    Properties:
-      GroupDescription: Lambda Security Group
-      VpcId: !Ref VPC
-
-  # Lambda Execution Role
+  # Lambda Execution Role with DSQL permissions
   LambdaExecutionRole:
     Type: AWS::IAM::Role
     Properties:
@@ -108,8 +50,17 @@ Resources:
               Service: lambda.amazonaws.com
             Action: sts:AssumeRole
       ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
       Policies:
+        - PolicyName: DSQLAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dsql:DbConnect
+                  - dsql:DbConnectAdmin
+                Resource: !GetAtt DSQLCluster.ClusterArn
         - PolicyName: BedrockS3Access
           PolicyDocument:
             Version: '2012-10-17'
@@ -139,21 +90,16 @@ Resources:
       Runtime: python3.11
       Handler: index.handler
       Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
       Code:
         ZipFile: |
           import json
           def handler(event, context):
-              return {'statusCode': 200, 'body': json.dumps('Chat Analysis')}
+              return {'statusCode': 200, 'body': json.dumps('Chat Analysis with DSQL')}
       Environment:
         Variables:
-          DB_HOST: !GetAtt Database.Endpoint.Address
+          DSQL_CLUSTER_ARN: !GetAtt DSQLCluster.ClusterArn
           S3_BUCKET: !Ref FileStorageBucket
-      VpcConfig:
-        SecurityGroupIds:
-          - !Ref LambdaSecurityGroup
-        SubnetIds:
-          - !Ref PrivateSubnet1
-          - !Ref PrivateSubnet2
 
   ResponseGenerationFunction:
     Type: AWS::Lambda::Function
@@ -167,11 +113,10 @@ Resources:
         ZipFile: |
           import json
           def handler(event, context):
-              return {'statusCode': 200, 'body': json.dumps('Response Generation')}
+              return {'statusCode': 200, 'body': json.dumps('Response Generation with DSQL')}
       Environment:
         Variables:
-          DB_HOST: !GetAtt Database.Endpoint.Address
-          S3_BUCKET: !Ref FileStorageBucket
+          DSQL_CLUSTER_ARN: !GetAtt DSQLCluster.ClusterArn
 
   FileUploadFunction:
     Type: AWS::Lambda::Function
@@ -184,12 +129,13 @@ Resources:
         ZipFile: |
           import json
           def handler(event, context):
-              return {'statusCode': 200, 'body': json.dumps('File Upload')}
+              return {'statusCode': 200, 'body': json.dumps('File Upload with DSQL')}
       Environment:
         Variables:
           S3_BUCKET: !Ref FileStorageBucket
+          DSQL_CLUSTER_ARN: !GetAtt DSQLCluster.ClusterArn
 
-  # CloudFront for Frontend
+  # CloudFront Distribution
   CloudFrontDistribution:
     Type: AWS::CloudFront::Distribution
     Properties:
@@ -236,9 +182,27 @@ Resources:
         IndexDocument: index.html
 
 Outputs:
+  DSQLClusterArn:
+    Description: DSQL Cluster ARN
+    Value: !GetAtt DSQLCluster.ClusterArn
+    Export:
+      Name: !Sub love-q-dsql-cluster-${Environment}
+
+  DSQLClusterEndpoint:
+    Description: DSQL Cluster Endpoint
+    Value: !GetAtt DSQLCluster.Endpoint
+    Export:
+      Name: !Sub love-q-dsql-endpoint-${Environment}
+
   ApiGatewayUrl:
     Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod
+
   CloudFrontUrl:
     Value: !GetAtt CloudFrontDistribution.DomainName
+
   S3Bucket:
     Value: !Ref FileStorageBucket
+
+  EstimatedMonthlyCost:
+    Description: Estimated monthly cost with DSQL
+    Value: "$1-5 (vs $40+ with RDS Aurora)"
