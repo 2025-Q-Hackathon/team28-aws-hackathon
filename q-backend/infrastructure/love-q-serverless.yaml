@@ -144,7 +144,7 @@ Outputs:
 
   DSQLClusterEndpoint:
     Description: DSQL Cluster Endpoint  
-    Value: !GetAtt DSQLCluster.Endpoint
+    Value: !Sub '${DSQLCluster}.dsql.${AWS::Region}.on.aws'
     Export:
       Name: !Sub love-q-dsql-endpoint-${Environment}
 
