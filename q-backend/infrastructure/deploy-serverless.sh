@@ -1,9 +1,9 @@
 #!/bin/bash
 
 ENVIRONMENT=${1:-dev}
-REGION=${2:-ap-northeast-2}
+REGION=${2:-us-east-1}  # US 리전으로 변경
 
-echo "🚀 Deploying Love Q with DSQL..."
+echo "🚀 Deploying Love Q with DSQL in $REGION..."
 
 aws cloudformation deploy \
     --template-file love-q-serverless.yaml \
@@ -29,6 +29,7 @@ DSQL_ARN=$(aws cloudformation describe-stacks \
 
 echo ""
 echo "🎉 Deployment Information:"
+echo "Region: $REGION"
 echo "API URL: $API_URL"
 echo "DSQL Cluster: $DSQL_ARN"
 echo "💰 Estimated Cost: $1-5/month (90% savings vs RDS)"
