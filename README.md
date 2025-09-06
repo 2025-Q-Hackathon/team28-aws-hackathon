@@ -13,6 +13,9 @@
 
 ## 🏗️아키텍처
 
+<img width="720" height="354" alt="image" src="https://github.com/user-attachments/assets/9e45cf65-824f-4b78-b187-bc0559e8146d" />
+
+
 ```
 Frontend (Next.js) → Amplify Auth → API Gateway → Lambda Functions
                          ↓              ↓              ↓
