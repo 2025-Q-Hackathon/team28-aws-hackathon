@@ -1,5 +1,5 @@
 AWSTemplateFormatVersion: '2010-09-09'
-Description: 'Love Q - DSQL Serverless Architecture (Simplified)'
+Description: 'Love Q - DSQL Serverless Architecture'
 
 Parameters:
   Environment:
@@ -52,7 +52,7 @@ Resources:
         IgnorePublicAcls: false
         RestrictPublicBuckets: false
 
-  # S3 Bucket Policy for frontend
+  # S3 Bucket Policy for frontend (simplified)
   FrontendBucketPolicy:
     Type: AWS::S3::BucketPolicy
     Properties:
@@ -60,11 +60,98 @@ Resources:
       PolicyDocument:
         Version: '2012-10-17'
         Statement:
-          - Sid: PublicReadGetObject
-            Effect: Allow
+          - Effect: Allow
             Principal: '*'
-            Action: s3:GetObject
-            Resource: !Sub '${FrontendBucket}/*'
+            Action: 's3:GetObject'
+            Resource: !Join ['', [!GetAtt FrontendBucket.Arn, '/*']]
+
+  # Lambda Execution Role
+  LambdaExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
+      Policies:
+        - PolicyName: DSQLAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - dsql:DbConnect
+                  - dsql:DbConnectAdmin
+                Resource: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
+        - PolicyName: BedrockS3Access
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - bedrock:InvokeModel
+                  - s3:GetObject
+                  - s3:PutObject
+                  - s3:DeleteObject
+                Resource: 
+                  - '*'
+                  - !Sub 'arn:aws:s3:::${FileStorageBucket}'
+                  - !Sub 'arn:aws:s3:::${FileStorageBucket}/*'
+
+  # Lambda Functions
+  SpeechAnalysisFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub love-q-speech-analysis-${Environment}
+      Runtime: python3.9
+      Handler: speech_analysis.lambda_handler
+      Code:
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'headers': {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  'body': json.dumps({'message': 'Speech Analysis Function'})
+              }
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
+
+  ChatAnalysisFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub love-q-chat-analysis-${Environment}
+      Runtime: python3.9
+      Handler: chat_analysis.lambda_handler
+      Code:
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'headers': {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  'body': json.dumps({'message': 'Chat Analysis Function'})
+              }
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      Environment:
+        Variables:
+          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
+          S3_BUCKET: !Ref FileStorageBucket
 
   # API Gateway
   ApiGateway:
@@ -90,33 +177,6 @@ Resources:
       RestApiId: !Ref ApiGateway
       ParentId: !GetAtt ApiGateway.RootResourceId
       PathPart: analyze
-
-  # Lambda Functions
-  SpeechAnalysisFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Sub love-q-speech-analysis-${Environment}
-      Runtime: python3.9
-      Handler: speech_analysis.lambda_handler
-      Code:
-        ZipFile: |
-          def lambda_handler(event, context):
-              return {'statusCode': 200, 'body': 'Hello from Speech Analysis!'}
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 30
-
-  ChatAnalysisFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Sub love-q-chat-analysis-${Environment}
-      Runtime: python3.9
-      Handler: chat_analysis.lambda_handler
-      Code:
-        ZipFile: |
-          def lambda_handler(event, context):
-              return {'statusCode': 200, 'body': 'Hello from Chat Analysis!'}
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 60
 
   # API Gateway Methods
   SpeechAnalysisMethod:
@@ -219,102 +279,6 @@ Resources:
     Properties:
       RestApiId: !Ref ApiGateway
       StageName: !Ref Environment
-  LambdaExecutionRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service: lambda.amazonaws.com
-            Action: sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole
-      Policies:
-        - PolicyName: DSQLAccess
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - dsql:DbConnect
-                  - dsql:DbConnectAdmin
-                Resource: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
-        - PolicyName: BedrockS3Access
-          PolicyDocument:
-            Version: '2012-10-17'
-            Statement:
-              - Effect: Allow
-                Action:
-                  - bedrock:InvokeModel
-                  - s3:GetObject
-                  - s3:PutObject
-                  - s3:DeleteObject
-                Resource: 
-                  - '*'
-                  - !Sub 'arn:aws:s3:::${FileStorageBucket}'
-                  - !Sub 'arn:aws:s3:::${FileStorageBucket}/*'
-
-  # API Gateway
-  ApiGateway:
-    Type: AWS::ApiGateway::RestApi
-    Properties:
-      Name: !Sub love-q-api-${Environment}
-      Description: Love Q API Gateway
-
-  # Lambda Functions
-  ChatAnalysisFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Sub love-q-chat-analysis-${Environment}
-      Runtime: python3.11
-      Handler: index.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 30
-      Code:
-        ZipFile: |
-          import json
-          def handler(event, context):
-              return {'statusCode': 200, 'body': json.dumps('Chat Analysis with DSQL')}
-      Environment:
-        Variables:
-          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
-          S3_BUCKET: !Ref FileStorageBucket
-
-  ResponseGenerationFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Sub love-q-response-gen-${Environment}
-      Runtime: python3.11
-      Handler: index.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Timeout: 30
-      Code:
-        ZipFile: |
-          import json
-          def handler(event, context):
-              return {'statusCode': 200, 'body': json.dumps('Response Generation with DSQL')}
-      Environment:
-        Variables:
-          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
-
-  FileUploadFunction:
-    Type: AWS::Lambda::Function
-    Properties:
-      FunctionName: !Sub love-q-file-upload-${Environment}
-      Runtime: python3.11
-      Handler: index.handler
-      Role: !GetAtt LambdaExecutionRole.Arn
-      Code:
-        ZipFile: |
-          import json
-          def handler(event, context):
-              return {'statusCode': 200, 'body': json.dumps('File Upload with DSQL')}
-      Environment:
-        Variables:
-          S3_BUCKET: !Ref FileStorageBucket
-          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
 
 Outputs:
   DSQLClusterArn:
@@ -330,9 +294,11 @@ Outputs:
       Name: !Sub love-q-dsql-cluster-name-${Environment}
 
   ApiGatewayUrl:
+    Description: API Gateway URL
     Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
 
   S3Bucket:
+    Description: File Storage S3 Bucket
     Value: !Ref FileStorageBucket
 
   FrontendUrl:
