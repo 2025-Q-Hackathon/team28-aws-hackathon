@@ -20,16 +20,14 @@ export interface SpeechAnalysisResponse {
   total_messages: number;
   tone: string;
   speech_style: string;
+  personality_traits: string[];
+  response_examples: string[];
 }
 
 export interface ChatAnalysisRequest {
   context: string;
   situation: string;
-  user_style: {
-    formal_ratio: number;
-    emoji_ratio: number;
-    avg_length: number;
-  };
+  user_style: SpeechAnalysisResponse;
   partner_info?: {
     name: string;
     age: string;
@@ -50,6 +48,17 @@ export interface ChatAnalysisResponse {
   responses: ResponseOption[];
 }
 
+export interface FileProcessRequest {
+  file_content: string;
+  file_type: string;
+}
+
+export interface FileProcessResponse {
+  messages_count: number;
+  analysis: SpeechAnalysisResponse;
+  sample_messages: string[];
+}
+
 export const apiService = {
   // 말투 분석
   analyzeSpeech: async (data: SpeechAnalysisRequest): Promise<SpeechAnalysisResponse> => {
@@ -63,7 +72,13 @@ export const apiService = {
     return response.data;
   },
 
-  // 파일 업로드
+  // 파일 처리
+  processFile: async (data: FileProcessRequest): Promise<FileProcessResponse> => {
+    const response = await api.post('/process-file', data);
+    return response.data;
+  },
+
+  // 파일 업로드 (기존)
   uploadFile: async (fileContent: string, fileName: string) => {
     try {
       const response = await api.post('/upload', {

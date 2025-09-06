@@ -122,7 +122,33 @@ JSON 형식으로 응답:
     except Exception as e:
         print(f"Bedrock API error: {e}")
     
-    # 기본 응답 (API 실패 시)
+    # 상황별 맞춤 기본 응답 (API 실패 시)
+    if "연락" in situation and "없어" in situation:
+        return [
+            {
+                "type": "안전형",
+                "message": "안녕! 잘 지내?",
+                "explanation": "자연스럽고 부담 없는 안부 인사로 대화를 재개합니다.",
+                "risk_level": 1,
+                "confidence": 0.9
+            },
+            {
+                "type": "표준형",
+                "message": "요즘 어떻게 지내? 바빴나?",
+                "explanation": "관심을 보이면서 상대방의 상황을 이해하려는 모습을 보입니다.",
+                "risk_level": 2,
+                "confidence": 0.8
+            },
+            {
+                "type": "대담형",
+                "message": "연락 없어서 걱정했어 ㅠㅠ 괜찮아?",
+                "explanation": "직접적으로 걱정했다는 감정을 표현하여 관심을 드러냅니다.",
+                "risk_level": 3,
+                "confidence": 0.7
+            }
+        ]
+    
+    # 기본 응답
     return [
         {
             "type": "안전형",
