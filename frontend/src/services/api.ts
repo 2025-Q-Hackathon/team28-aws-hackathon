@@ -70,6 +70,7 @@ export interface ResponseOption {
   explanation: string;
   risk_level: number;
   confidence: number;
+  advice?: string;
 }
 
 export interface ChatAnalysisResponse {

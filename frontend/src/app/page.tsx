@@ -887,6 +887,21 @@ function HomeContent() {
               채팅 시작! →
             </button>
           </div>
+          
+          {/* 채팅 시작 조건 안내 */}
+          {(!partnerInfo.relationship || !partnerInfo.description.trim() || partnerInfo.description.length < 20) && (
+            <div className="mt-3 p-3 bg-yellow-50 border border-yellow-200 rounded-lg">
+              <div className="text-sm text-yellow-800">
+                <p className="font-medium mb-1">⚠️ 채팅을 시작하려면 다음을 완료해주세요:</p>
+                <ul className="text-xs space-y-1">
+                  {!partnerInfo.relationship && <li>• 관계를 선택해주세요</li>}
+                  {(!partnerInfo.description.trim() || partnerInfo.description.length < 20) && (
+                    <li>• 상세 설명을 20자 이상 입력해주세요 (현재: {partnerInfo.description.length}자)</li>
+                  )}
+                </ul>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>
