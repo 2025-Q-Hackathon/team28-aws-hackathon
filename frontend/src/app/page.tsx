@@ -20,6 +20,8 @@ interface SpeechProfile {
   avg_length: number;
   tone: string;
   speech_style: string;
+  personality_traits: string[];
+  response_examples: string[];
 }
 
 interface PartnerInfo {
@@ -125,11 +127,7 @@ export default function Home() {
       const result = await apiService.generateResponses({
         context: messages.map(m => m.text).join('\n'),
         situation: userMessage,
-        user_style: {
-          formal_ratio: speechProfile.formal_ratio,
-          emoji_ratio: speechProfile.emoji_ratio,
-          avg_length: speechProfile.avg_length
-        },
+        user_style: speechProfile,
         partner_info: partnerInfo
       });
 
@@ -262,12 +260,40 @@ export default function Home() {
 
         {speechProfile && (
           <div className="backdrop-blur-lg bg-white/20 rounded-2xl p-4 mb-4">
-            <h3 className="font-semibold text-gray-800 mb-2">📊 분석 결과</h3>
-            <div className="text-sm text-gray-700 space-y-1">
-              <p>• 존댓말 비율: {Math.round(speechProfile.formal_ratio * 100)}%</p>
-              <p>• 이모티콘 사용: {speechProfile.emoji_ratio.toFixed(1)}개/메시지</p>
-              <p>• 평균 메시지 길이: {Math.round(speechProfile.avg_length)}자</p>
-              <p>• 말투 스타일: {speechProfile.speech_style}</p>
+            <h3 className="font-semibold text-gray-800 mb-3">📊 말투 분석 결과</h3>
+            <div className="text-sm text-gray-700 space-y-2">
+              <div className="grid grid-cols-2 gap-2">
+                <p>• 존댓말 비율: {Math.round(speechProfile.formal_ratio * 100)}%</p>
+                <p>• 이모티콘 사용: {speechProfile.emoji_ratio.toFixed(1)}개/메시지</p>
+                <p>• 평균 메시지 길이: {Math.round(speechProfile.avg_length)}자</p>
+                <p>• 말투 스타일: {speechProfile.speech_style}</p>
+              </div>
+              
+              {speechProfile.personality_traits && speechProfile.personality_traits.length > 0 && (
+                <div>
+                  <p className="font-medium">성격 특성:</p>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {speechProfile.personality_traits.map((trait, index) => (
+                      <span key={index} className="px-2 py-1 bg-purple-100 text-purple-700 rounded-full text-xs">
+                        {trait}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              )}
+              
+              {speechProfile.response_examples && speechProfile.response_examples.length > 0 && (
+                <div>
+                  <p className="font-medium">말투 예시:</p>
+                  <div className="mt-1 space-y-1">
+                    {speechProfile.response_examples.slice(0, 3).map((example, index) => (
+                      <p key={index} className="text-xs bg-gray-100 rounded px-2 py-1">
+                        "{example}"
+                      </p>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </div>
         )}

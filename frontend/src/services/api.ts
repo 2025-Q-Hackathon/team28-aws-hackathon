@@ -20,16 +20,14 @@ export interface SpeechAnalysisResponse {
   total_messages: number;
   tone: string;
   speech_style: string;
+  personality_traits: string[];
+  response_examples: string[];
 }
 
 export interface ChatAnalysisRequest {
   context: string;
   situation: string;
-  user_style: {
-    formal_ratio: number;
-    emoji_ratio: number;
-    avg_length: number;
-  };
+  user_style: SpeechAnalysisResponse;
   partner_info?: {
     name: string;
     age: string;
@@ -73,7 +71,15 @@ export const apiService = {
         avg_length: 25,
         total_messages: data.messages.length,
         tone: '친근함',
-        speech_style: '캐주얼'
+        speech_style: '캐주얼',
+        personality_traits: ['활발함', '친근함', '솔직함'],
+        response_examples: [
+          '오 좋아! 언제 할까?',
+          'ㅋㅋㅋ 그러게~ 나도 그렇게 생각해',
+          '아 진짜? 대박이네 ㅎㅎ',
+          '음... 그건 좀 어려울 것 같은데?',
+          '고마워! 너 정말 최고야 😊'
+        ]
       };
     }
     const response = await api.post('/analyze-speech', data);
