@@ -5,8 +5,13 @@ node_modules/
 # Next.js
 frontend/.next/
 frontend/out/
+
+# Environment files (보안상 중요)
 frontend/.env.local
 frontend/.env*.local
+.env
+.env.local
+.env.*.local
 
 # Build outputs
 *.log

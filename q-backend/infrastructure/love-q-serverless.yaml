@@ -76,32 +76,8 @@ Resources:
       IdTokenValidity: 24
       RefreshTokenValidity: 30
 
-  # S3 Bucket for frontend hosting (Amplify will replace this)
-  FrontendBucket:
-    Type: AWS::S3::Bucket
-    Properties:
-      BucketName: !Sub love-q-frontend-${Environment}-${AWS::AccountId}
-      WebsiteConfiguration:
-        IndexDocument: index.html
-        ErrorDocument: 404.html
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: false
-        BlockPublicPolicy: false
-        IgnorePublicAcls: false
-        RestrictPublicBuckets: false
-
-  # S3 Bucket Policy for frontend (simplified)
-  FrontendBucketPolicy:
-    Type: AWS::S3::BucketPolicy
-    Properties:
-      Bucket: !Ref FrontendBucket
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal: '*'
-            Action: 's3:GetObject'
-            Resource: !Join ['', [!GetAtt FrontendBucket.Arn, '/*']]
+  # Note: Frontend will be deployed via AWS Amplify
+  # No S3 bucket needed for static hosting
 
   # Lambda Execution Role
   LambdaExecutionRole:
@@ -405,13 +381,9 @@ Outputs:
     Description: File Storage S3 Bucket
     Value: !Ref FileStorageBucket
 
-  FrontendUrl:
-    Description: Frontend Website URL
-    Value: !Sub http://${FrontendBucket}.s3-website-${AWS::Region}.amazonaws.com
-
-  FrontendBucketName:
-    Description: Frontend S3 Bucket Name
-    Value: !Ref FrontendBucket
+  AmplifyDeploymentGuide:
+    Description: Frontend deployment guide
+    Value: "Deploy via AWS Amplify - Connect GitHub repo and set environment variables"
 
   LambdaExecutionRoleArn:
     Description: Lambda Execution Role ARN

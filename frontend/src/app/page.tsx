@@ -94,6 +94,10 @@ interface SpeechProfile {
   speech_style: string;
   personality_traits: string[];
   response_examples: string[];
+  emotion_data?: {
+    sentiment: string;
+    sentiment_confidence: number;
+  };
 }
 
 interface PartnerInfo {
