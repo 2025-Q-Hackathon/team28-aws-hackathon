@@ -38,32 +38,46 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
-  # S3 Bucket for frontend hosting
-  FrontendBucket:
-    Type: AWS::S3::Bucket
+  # Cognito User Pool
+  CognitoUserPool:
+    Type: AWS::Cognito::UserPool
     Properties:
-      BucketName: !Sub love-q-frontend-${Environment}-${AWS::AccountId}
-      WebsiteConfiguration:
-        IndexDocument: index.html
-        ErrorDocument: 404.html
-      PublicAccessBlockConfiguration:
-        BlockPublicAcls: false
-        BlockPublicPolicy: false
-        IgnorePublicAcls: false
-        RestrictPublicBuckets: false
+      UserPoolName: !Sub love-q-users-${Environment}
+      AutoVerifiedAttributes:
+        - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireUppercase: false
+          RequireLowercase: false
+          RequireNumbers: false
+          RequireSymbols: false
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Required: true
+          Mutable: true
 
-  # S3 Bucket Policy for frontend (simplified)
-  FrontendBucketPolicy:
-    Type: AWS::S3::BucketPolicy
+  # Cognito User Pool Client
+  CognitoUserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
     Properties:
-      Bucket: !Ref FrontendBucket
-      PolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal: '*'
-            Action: 's3:GetObject'
-            Resource: !Join ['', [!GetAtt FrontendBucket.Arn, '/*']]
+      ClientName: !Sub love-q-client-${Environment}
+      UserPoolId: !Ref CognitoUserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+        - ALLOW_USER_SRP_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+      AccessTokenValidity: 24
+      IdTokenValidity: 24
+      RefreshTokenValidity: 30
+
+  # Note: Frontend will be deployed via AWS Amplify
+  # No S3 bucket needed for static hosting
 
   # Lambda Execution Role
   LambdaExecutionRole:
@@ -88,13 +102,16 @@ Resources:
                   - dsql:DbConnect
                   - dsql:DbConnectAdmin
                 Resource: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
-        - PolicyName: BedrockS3Access
+        - PolicyName: BedrockS3ComprehendAccess
           PolicyDocument:
             Version: '2012-10-17'
             Statement:
               - Effect: Allow
                 Action:
                   - bedrock:InvokeModel
+                  - comprehend:DetectSentiment
+                  - comprehend:DetectEntities
+                  - comprehend:DetectKeyPhrases
                   - s3:GetObject
                   - s3:PutObject
                   - s3:DeleteObject
@@ -102,6 +119,66 @@ Resources:
                   - '*'
                   - !Sub 'arn:aws:s3:::${FileStorageBucket}'
                   - !Sub 'arn:aws:s3:::${FileStorageBucket}/*'
+        - PolicyName: CognitoAccess
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - cognito-idp:AdminGetUser
+                  - cognito-idp:AdminCreateUser
+                  - cognito-idp:AdminUpdateUserAttributes
+                Resource: !GetAtt CognitoUserPool.Arn
+
+  # New Lambda Functions for v2.0
+  EmotionAnalysisFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub love-q-emotion-analysis-${Environment}
+      Runtime: python3.9
+      Handler: emotion_analysis.lambda_handler
+      Code:
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'headers': {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  'body': json.dumps({'message': 'Emotion Analysis Function'})
+              }
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 30
+      Environment:
+        Variables:
+          DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
+
+  AuthMiddlewareFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Sub love-q-auth-middleware-${Environment}
+      Runtime: python3.9
+      Handler: auth_middleware.lambda_handler
+      Code:
+        ZipFile: |
+          import json
+          def lambda_handler(event, context):
+              return {
+                  'statusCode': 200,
+                  'headers': {
+                      'Content-Type': 'application/json',
+                      'Access-Control-Allow-Origin': '*'
+                  },
+                  'body': json.dumps({'message': 'Auth Middleware Function'})
+              }
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 15
+      Environment:
+        Variables:
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
+          COGNITO_CLIENT_ID: !Ref CognitoUserPoolClient
 
   # Lambda Functions
   SpeechAnalysisFunction:
@@ -127,6 +204,7 @@ Resources:
       Environment:
         Variables:
           DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
+          EMOTION_ANALYSIS_FUNCTION: !Ref EmotionAnalysisFunction
 
   ChatAnalysisFunction:
     Type: AWS::Lambda::Function
@@ -152,6 +230,8 @@ Resources:
         Variables:
           DSQL_CLUSTER_ARN: !Sub 'arn:aws:dsql:${AWS::Region}:${AWS::AccountId}:cluster/${DSQLCluster}'
           S3_BUCKET: !Ref FileStorageBucket
+          EMOTION_ANALYSIS_FUNCTION: !Ref EmotionAnalysisFunction
+          COGNITO_USER_POOL_ID: !Ref CognitoUserPool
 
   # API Gateway
   ApiGateway:
@@ -301,13 +381,9 @@ Outputs:
     Description: File Storage S3 Bucket
     Value: !Ref FileStorageBucket
 
-  FrontendUrl:
-    Description: Frontend Website URL
-    Value: !Sub http://${FrontendBucket}.s3-website-${AWS::Region}.amazonaws.com
-
-  FrontendBucketName:
-    Description: Frontend S3 Bucket Name
-    Value: !Ref FrontendBucket
+  AmplifyDeploymentGuide:
+    Description: Frontend deployment guide
+    Value: "Deploy via AWS Amplify - Connect GitHub repo and set environment variables"
 
   LambdaExecutionRoleArn:
     Description: Lambda Execution Role ARN
@@ -316,3 +392,23 @@ Outputs:
   EstimatedMonthlyCost:
     Description: Estimated monthly cost with DSQL
     Value: "$1-5 (vs $40+ with RDS Aurora)"
+
+  CognitoUserPoolId:
+    Description: Cognito User Pool ID
+    Value: !Ref CognitoUserPool
+    Export:
+      Name: !Sub love-q-cognito-pool-${Environment}
+
+  CognitoClientId:
+    Description: Cognito User Pool Client ID
+    Value: !Ref CognitoUserPoolClient
+    Export:
+      Name: !Sub love-q-cognito-client-${Environment}
+
+  EmotionAnalysisFunctionArn:
+    Description: Emotion Analysis Lambda Function ARN
+    Value: !GetAtt EmotionAnalysisFunction.Arn
+
+  AuthMiddlewareFunctionArn:
+    Description: Auth Middleware Lambda Function ARN
+    Value: !GetAtt AuthMiddlewareFunction.Arn

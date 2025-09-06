@@ -3,6 +3,10 @@
 import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { apiService, ResponseOption } from '../services/api';
+import { AuthProvider } from '../lib/auth-context';
+import AuthWrapper from '../components/AuthWrapper';
+import { useAuth } from '../lib/auth-context';
+import '../lib/amplify'; // Amplify 설정 로드
 
 // 복사 버튼 컴포넌트
 function CopyButton({ text }: { text: string }) {
@@ -90,6 +94,10 @@ interface SpeechProfile {
   speech_style: string;
   personality_traits: string[];
   response_examples: string[];
+  emotion_data?: {
+    sentiment: string;
+    sentiment_confidence: number;
+  };
 }
 
 interface PartnerInfo {
@@ -99,7 +107,8 @@ interface PartnerInfo {
   personality: string;
 }
 
-export default function Home() {
+function HomeContent() {
+  const { user, signOut } = useAuth();
   const [currentScreen, setCurrentScreen] = useState('speech-learning');
   const [speechData, setSpeechData] = useState('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
@@ -207,7 +216,7 @@ export default function Home() {
 
   // 답변 생성 함수
   const generateResponses = async (userMessage: string) => {
-    if (!speechProfile) return;
+    if (!speechProfile || !user) return;
 
     setIsTyping(true);
     try {
@@ -217,6 +226,19 @@ export default function Home() {
         user_style: speechProfile,
         partner_info: partnerInfo
       });
+
+      // 대화 기록 저장
+      try {
+        await apiService.saveConversation({
+          user_id: user.userId,
+          user_message: userMessage,
+          ai_responses: result.responses,
+          partner_name: partnerInfo.name,
+          partner_relationship: partnerInfo.relationship
+        });
+      } catch (saveError) {
+        console.warn('Failed to save conversation:', saveError);
+      }
 
       // 답변 옵션들을 메시지로 추가
       result.responses.forEach((response, index) => {
@@ -258,6 +280,33 @@ export default function Home() {
     setMessages(prev => [...prev, userMessage]);
     generateResponses(inputText);
     setInputText('');
+  };
+
+  const handleResponseSelection = async (responseData: any) => {
+    if (!user) return;
+    
+    try {
+      // 선택된 답변 피드백 저장
+      await apiService.saveConversation({
+        user_id: user.userId,
+        user_message: messages[messages.length - 2]?.text || '', // 마지막 사용자 메시지
+        ai_responses: [responseData],
+        selected_response_type: responseData.type,
+        selected_response: responseData.message,
+        partner_name: partnerInfo.name,
+        partner_relationship: partnerInfo.relationship
+      });
+      
+      // 선택 완료 메시지 표시
+      setMessages(prev => [...prev, {
+        id: Date.now(),
+        text: `✅ "${responseData.message}" 답변을 선택하셨습니다!\n\n다른 상황이 있으면 언제든 말해주세요 😊`,
+        sender: 'bot',
+        timestamp: new Date()
+      }]);
+    } catch (error) {
+      console.error('Failed to save response selection:', error);
+    }
   };
 
   // 말투 학습 화면
@@ -430,6 +479,17 @@ export default function Home() {
                 <p>• 말투 스타일: {speechProfile.speech_style}</p>
               </div>
               
+              {/* 감정 데이터 표시 */}
+              {speechProfile.emotion_data && (
+                <div className="mt-3 p-2 bg-blue-50 rounded-lg">
+                  <p className="font-medium text-blue-800">😊 감정 상태:</p>
+                  <p className="text-blue-700 text-xs">
+                    {speechProfile.emotion_data.sentiment} 
+                    ({Math.round(speechProfile.emotion_data.sentiment_confidence * 100)}% 신뢰도)
+                  </p>
+                </div>
+              )}
+              
               {speechProfile.personality_traits && speechProfile.personality_traits.length > 0 && (
                 <div>
                   <p className="font-medium">성격 특성:</p>
@@ -500,11 +560,25 @@ export default function Home() {
               ← 이전
             </button>
             <button
-              onClick={() => {
+              onClick={async () => {
                 setCurrentScreen('chatbot');
+                
+                // 사용자 대화 히스토리 로드 시도
+                let historyMessage = '';
+                if (user) {
+                  try {
+                    const history = await apiService.getConversationHistory(user.userId, 3);
+                    if (history.conversations && history.conversations.length > 0) {
+                      historyMessage = `\n\n📜 최근 대화 ${history.conversations.length}건을 참고하여 더 좋은 답변을 드릴게요!`;
+                    }
+                  } catch (error) {
+                    console.warn('Failed to load conversation history:', error);
+                  }
+                }
+                
                 setMessages([{
                   id: 1,
-                  text: `안녕! 나는 Love Q야 💕\n\n${partnerInfo.name ? `${partnerInfo.name}님과의 ` : ''}대화에서 어떤 상황인지 말해줘!\n\n예: "영화 보자고 했는데 뭐라고 답할까?"\n"갑자기 연락이 없어서 걱정돼"`,
+                  text: `안녕! 나는 Love Q v2.0이야 💕\n\n${partnerInfo.name ? `${partnerInfo.name}님과의 ` : ''}대화에서 어떤 상황인지 말해줘!${historyMessage}\n\n예: "영화 보자고 했는데 뭐라고 답할까?"\n"갑자기 연락이 없어서 걱정돼"`,
                   sender: 'bot',
                   timestamp: new Date()
                 }]);
@@ -531,16 +605,27 @@ export default function Home() {
               <span className="text-xl">💕</span>
             </div>
             <div>
-              <h1 className="font-bold text-purple-800">Love Q</h1>
-              <p className="text-xs text-purple-600">연애 답변 도우미</p>
+              <h1 className="font-bold text-purple-800">Love Q v2.0</h1>
+              <p className="text-xs text-purple-600">개인화 AI 연애 도우미</p>
             </div>
           </div>
-          <button
-            onClick={() => setCurrentScreen('partner-info')}
-            className="text-purple-600 hover:text-purple-800 text-sm"
-          >
-            설정 변경
-          </button>
+          <div className="flex items-center space-x-3">
+            <span className="text-sm text-purple-600">
+              {user?.signInDetails?.loginId || '사용자'}
+            </span>
+            <button
+              onClick={() => setCurrentScreen('partner-info')}
+              className="text-purple-600 hover:text-purple-800 text-sm"
+            >
+              설정
+            </button>
+            <button
+              onClick={signOut}
+              className="text-red-600 hover:text-red-800 text-sm"
+            >
+              로그아웃
+            </button>
+          </div>
         </div>
       </div>
 
@@ -583,8 +668,16 @@ export default function Home() {
                       <p className="mt-1">{message.data.explanation}</p>
                     </div>
                     
-                    {/* 복사 버튼 */}
-                    <CopyButton text={message.data.message} />
+                    {/* 복사 및 선택 버튼 */}
+                    <div className="flex space-x-2 mt-3">
+                      <CopyButton text={message.data.message} />
+                      <button
+                        onClick={() => handleResponseSelection(message.data)}
+                        className="flex-1 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg text-sm font-medium transition-colors"
+                      >
+                        ✅ 이 답변 선택
+                      </button>
+                    </div>
                   </div>
                 </div>
               ) : (
@@ -656,4 +749,14 @@ export default function Home() {
     default:
       return renderSpeechLearning();
   }
+}
+
+export default function Home() {
+  return (
+    <AuthProvider>
+      <AuthWrapper>
+        <HomeContent />
+      </AuthWrapper>
+    </AuthProvider>
+  );
 }
