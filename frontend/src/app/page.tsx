@@ -4,6 +4,74 @@ import { useState, useEffect, useRef } from 'react';
 import ReactMarkdown from 'react-markdown';
 import { apiService, ResponseOption } from '../services/api';
 
+// 복사 버튼 컴포넌트
+function CopyButton({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = async () => {
+    try {
+      // 최신 브라우저의 Clipboard API 사용
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        // 대체 방법 (구형 브라우저 또는 비보안 컨텍스트)
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        
+        const successful = document.execCommand('copy');
+        document.body.removeChild(textArea);
+        
+        if (!successful) {
+          throw new Error('복사 실패');
+        }
+      }
+      
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch (err) {
+      console.error('복사 실패:', err);
+      // 사용자에게 수동 복사 안내
+      const userAgent = navigator.userAgent;
+      const isMobile = /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(userAgent);
+      
+      if (isMobile) {
+        alert('복사 기능을 사용할 수 없습니다. 답변을 길게 눌러서 복사해주세요.');
+      } else {
+        alert('복사 기능을 사용할 수 없습니다. Ctrl+C로 복사해주세요.');
+      }
+    }
+  };
+
+  return (
+    <button
+      onClick={handleCopy}
+      className={`mt-3 w-full py-2 rounded-lg text-sm font-medium transition-all duration-200 ${
+        copied 
+          ? 'bg-green-100 text-green-700 border border-green-300' 
+          : 'bg-purple-100 hover:bg-purple-200 text-purple-700'
+      }`}
+    >
+      {copied ? (
+        <span className="flex items-center justify-center space-x-1">
+          <span>✅</span>
+          <span>복사 완료!</span>
+        </span>
+      ) : (
+        <span className="flex items-center justify-center space-x-1">
+          <span>📋</span>
+          <span>답변 복사하기</span>
+        </span>
+      )}
+    </button>
+  );
+}
+
 interface Message {
   id: number;
   text: string;
@@ -46,6 +114,8 @@ export default function Home() {
   const [inputText, setInputText] = useState('');
   const [isTyping, setIsTyping] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
+  const [uploadError, setUploadError] = useState<string>('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   // 헬퍼 함수들
@@ -76,19 +146,36 @@ export default function Home() {
   const handleFileUpload = async (file: File) => {
     if (!file) return;
     
+    setUploadStatus('uploading');
+    setUploadError('');
     setIsAnalyzing(true);
+    
     try {
       const fileContent = await file.text();
+      
+      // 파일 내용 검증
+      if (!fileContent.trim()) {
+        throw new Error('파일이 비어있습니다.');
+      }
+      
       const result = await apiService.processFile({
         file_content: fileContent,
         file_type: file.name.endsWith('.txt') ? 'txt' : 'kakao'
       });
       
       setSpeechProfile(result.analysis);
-      setCurrentScreen('partner-info');
+      setUploadStatus('success');
+      
+      // 성공 후 잠시 대기 후 다음 화면으로
+      setTimeout(() => {
+        setCurrentScreen('partner-info');
+      }, 1500);
+      
     } catch (error) {
       console.error('File processing failed:', error);
-      alert('파일 처리 중 오류가 발생했습니다.');
+      const errorMessage = error instanceof Error ? error.message : '파일 처리 중 오류가 발생했습니다.';
+      setUploadError(errorMessage);
+      setUploadStatus('error');
     } finally {
       setIsAnalyzing(false);
     }
@@ -206,43 +293,117 @@ export default function Home() {
 
           <div className="mb-4">
             <div className="flex items-center justify-center w-full">
-              <label className="flex flex-col items-center justify-center w-full h-20 border-2 border-purple-300 border-dashed rounded-2xl cursor-pointer bg-white/20 hover:bg-white/30 transition-colors">
+              <label className={`flex flex-col items-center justify-center w-full h-20 border-2 border-dashed rounded-2xl transition-colors ${
+                uploadStatus === 'uploading' 
+                  ? 'border-blue-300 bg-blue-50/50 cursor-not-allowed'
+                  : uploadStatus === 'success'
+                  ? 'border-green-300 bg-green-50/50 cursor-pointer'
+                  : uploadStatus === 'error'
+                  ? 'border-red-300 bg-red-50/50 cursor-pointer'
+                  : 'border-purple-300 bg-white/20 hover:bg-white/30 cursor-pointer'
+              }`}>
                 <div className="flex flex-col items-center justify-center pt-2 pb-2">
-                  <svg className="w-6 h-6 mb-1 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
-                  </svg>
-                  <p className="text-xs text-purple-600">
-                    <span className="font-semibold">카카오톡 대화내역 업로드</span>
+                  {uploadStatus === 'uploading' ? (
+                    <div className="w-6 h-6 mb-1 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                  ) : uploadStatus === 'success' ? (
+                    <span className="text-2xl mb-1">✅</span>
+                  ) : uploadStatus === 'error' ? (
+                    <span className="text-2xl mb-1">❌</span>
+                  ) : (
+                    <svg className="w-6 h-6 mb-1 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                    </svg>
+                  )}
+                  <p className={`text-xs ${
+                    uploadStatus === 'uploading' ? 'text-blue-600' :
+                    uploadStatus === 'success' ? 'text-green-600' :
+                    uploadStatus === 'error' ? 'text-red-600' :
+                    'text-purple-600'
+                  }`}>
+                    <span className="font-semibold">
+                      {uploadStatus === 'uploading' ? '분석 중...' :
+                       uploadStatus === 'success' ? '분석 완료!' :
+                       uploadStatus === 'error' ? '다시 시도' :
+                       '카카오톡 대화내역 업로드'}
+                    </span>
                   </p>
-                  <p className="text-xs text-purple-500">TXT 파일 지원</p>
+                  <p className={`text-xs ${
+                    uploadStatus === 'uploading' ? 'text-blue-500' :
+                    uploadStatus === 'success' ? 'text-green-500' :
+                    uploadStatus === 'error' ? 'text-red-500' :
+                    'text-purple-500'
+                  }`}>
+                    {uploadStatus === 'error' ? '파일을 다시 선택해주세요' : 'TXT 파일 지원'}
+                  </p>
                 </div>
                 <input
                   type="file"
                   className="hidden"
                   accept=".txt"
+                  disabled={uploadStatus === 'uploading'}
                   onChange={(e) => {
                     const file = e.target.files?.[0];
                     if (file) {
                       setUploadedFile(file);
+                      setUploadStatus('idle');
+                      setUploadError('');
+                      
+                      // 파일 크기 및 형식 검증
+                      if (file.size > 10 * 1024 * 1024) { // 10MB 제한
+                        setUploadError('파일 크기가 너무 큽니다. (10MB 이하)');
+                        setUploadStatus('error');
+                        return;
+                      }
+                      
+                      if (!file.name.toLowerCase().endsWith('.txt')) {
+                        setUploadError('TXT 파일만 업로드 가능합니다.');
+                        setUploadStatus('error');
+                        return;
+                      }
+                      
                       handleFileUpload(file);
                     }
+                    // 파일 선택 후 input 초기화 (같은 파일 재선택 가능)
+                    e.target.value = '';
                   }}
                 />
               </label>
             </div>
-            {uploadedFile && (
+            {/* 업로드 상태 표시 */}
+            {uploadStatus === 'uploading' && (
+              <div className="text-xs text-blue-600 mt-2 text-center flex items-center justify-center space-x-2">
+                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                <span>파일 분석 중...</span>
+              </div>
+            )}
+            {uploadStatus === 'success' && (
+              <div className="text-xs text-green-600 mt-2 text-center flex items-center justify-center space-x-1">
+                <span>✅</span>
+                <span>분석 완료! 다음 단계로 이동합니다...</span>
+              </div>
+            )}
+            {uploadStatus === 'error' && (
+              <div className="text-xs text-red-600 mt-2 text-center">
+                <div className="flex items-center justify-center space-x-1 mb-1">
+                  <span>❌</span>
+                  <span>업로드 실패</span>
+                </div>
+                <p className="text-red-500">{uploadError}</p>
+              </div>
+            )}
+            {uploadedFile && uploadStatus === 'idle' && (
               <p className="text-xs text-purple-600 mt-2 text-center">
-                📁 {uploadedFile.name} 업로드됨
+                📁 {uploadedFile.name} 선택됨
               </p>
             )}
           </div>
 
           <button
             onClick={analyzeSpeech}
-            disabled={!speechData.trim() || isAnalyzing}
+            disabled={!speechData.trim() || isAnalyzing || uploadStatus === 'uploading'}
             className="w-full px-6 py-3 bg-purple-600 text-white rounded-2xl hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all duration-300 shadow-lg"
           >
-            {isAnalyzing ? '분석 중...' : '말투 분석하고 다음으로 →'}
+            {isAnalyzing || uploadStatus === 'uploading' ? '분석 중...' : '말투 분석하고 다음으로 →'}
           </button>
         </div>
       </div>
@@ -423,15 +584,7 @@ export default function Home() {
                     </div>
                     
                     {/* 복사 버튼 */}
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(message.data.message);
-                        alert('답변이 복사되었습니다!');
-                      }}
-                      className="mt-3 w-full py-2 bg-purple-100 hover:bg-purple-200 text-purple-700 rounded-lg text-sm font-medium transition-colors"
-                    >
-                      📋 답변 복사하기
-                    </button>
+                    <CopyButton text={message.data.message} />
                   </div>
                 </div>
               ) : (
