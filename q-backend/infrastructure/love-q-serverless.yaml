@@ -38,6 +38,34 @@ Resources:
         IgnorePublicAcls: true
         RestrictPublicBuckets: true
 
+  # S3 Bucket for frontend hosting
+  FrontendBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub love-q-frontend-${Environment}-${AWS::AccountId}
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: 404.html
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        BlockPublicPolicy: false
+        IgnorePublicAcls: false
+        RestrictPublicBuckets: false
+
+  # S3 Bucket Policy for frontend
+  FrontendBucketPolicy:
+    Type: AWS::S3::BucketPolicy
+    Properties:
+      Bucket: !Ref FrontendBucket
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Sid: PublicReadGetObject
+            Effect: Allow
+            Principal: '*'
+            Action: s3:GetObject
+            Resource: !Sub '${FrontendBucket}/*'
+
   # API Gateway
   ApiGateway:
     Type: AWS::ApiGateway::RestApi
@@ -302,10 +330,18 @@ Outputs:
       Name: !Sub love-q-dsql-cluster-name-${Environment}
 
   ApiGatewayUrl:
-    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/prod
+    Value: !Sub https://${ApiGateway}.execute-api.${AWS::Region}.amazonaws.com/${Environment}
 
   S3Bucket:
     Value: !Ref FileStorageBucket
+
+  FrontendUrl:
+    Description: Frontend Website URL
+    Value: !Sub http://${FrontendBucket}.s3-website-${AWS::Region}.amazonaws.com
+
+  FrontendBucketName:
+    Description: Frontend S3 Bucket Name
+    Value: !Ref FrontendBucket
 
   LambdaExecutionRoleArn:
     Description: Lambda Execution Role ARN
