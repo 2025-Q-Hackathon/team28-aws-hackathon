@@ -10,6 +10,7 @@ interface ResponseCardProps {
     risk_level: number;
     confidence: number;
     emoji?: string;
+    advice?: string;
   };
   onSelect: (response: any) => void;
   onCopy: (text: string) => void;
