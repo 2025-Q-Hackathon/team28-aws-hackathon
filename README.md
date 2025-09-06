@@ -1,4 +1,4 @@
-<img width="1708" height="840" alt="image" src="https://github.com/user-attachments/assets/701ea82f-cfbd-4871-93e5-9e986c52dfb0" /># **IGRUS : Love Q - AI 연애 답변 도우미** 💕
+**IGRUS : Love Q - AI 연애 답변 도우미** 💕
 
 ## **어플리케이션 개요**
 
