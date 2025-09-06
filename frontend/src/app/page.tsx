@@ -5,6 +5,12 @@ import ReactMarkdown from 'react-markdown';
 import { apiService, ResponseOption } from '../services/api';
 import { AuthProvider } from '../lib/auth-context';
 import AuthWrapper from '../components/AuthWrapper';
+import LoadingSpinner from '../components/LoadingSpinner';
+import ErrorMessage from '../components/ErrorMessage';
+import SuccessMessage from '../components/SuccessMessage';
+import ResponseCard from '../components/ResponseCard';
+import ChatRoomManager from '../components/ChatRoomManager';
+import UserProfile from '../components/UserProfile';
 import { useAuth } from '../lib/auth-context';
 import '../lib/amplify'; // Amplify 설정 로드
 
@@ -109,7 +115,7 @@ interface PartnerInfo {
 
 function HomeContent() {
   const { user, signOut } = useAuth();
-  const [currentScreen, setCurrentScreen] = useState('speech-learning');
+  const [currentScreen, setCurrentScreen] = useState('welcome');
   const [speechData, setSpeechData] = useState('');
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [speechProfile, setSpeechProfile] = useState<SpeechProfile | null>(null);
@@ -125,7 +131,14 @@ function HomeContent() {
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [uploadStatus, setUploadStatus] = useState<'idle' | 'uploading' | 'success' | 'error'>('idle');
   const [uploadError, setUploadError] = useState<string>('');
+  const [currentRoomId, setCurrentRoomId] = useState<string>('');
+  const [showProfile, setShowProfile] = useState(false);
+  const [copiedText, setCopiedText] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const userMenuRef = useRef<HTMLDivElement>(null);
 
   // 헬퍼 함수들
   const getTypeEmoji = (type: string) => {
@@ -150,6 +163,20 @@ function HomeContent() {
   useEffect(() => {
     scrollToBottom();
   }, [messages]);
+
+  // 사용자 메뉴 외부 클릭 감지
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (userMenuRef.current && !userMenuRef.current.contains(event.target as Node)) {
+        setUserMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, []);
 
   // 파일 업로드 처리
   const handleFileUpload = async (file: File) => {
@@ -214,7 +241,7 @@ function HomeContent() {
     }
   };
 
-  // 답변 생성 함수
+  // 답변 생성 함수 (최적 답변 1개만)
   const generateResponses = async (userMessage: string) => {
     if (!speechProfile || !user) return;
 
@@ -227,12 +254,15 @@ function HomeContent() {
         partner_info: partnerInfo
       });
 
+      // 사용자 말투에 가장 적합한 답변 선택
+      const bestResponse = selectBestResponse(result.responses, speechProfile);
+
       // 대화 기록 저장
       try {
         await apiService.saveConversation({
           user_id: user.userId,
           user_message: userMessage,
-          ai_responses: result.responses,
+          ai_responses: [bestResponse],
           partner_name: partnerInfo.name,
           partner_relationship: partnerInfo.relationship
         });
@@ -240,19 +270,17 @@ function HomeContent() {
         console.warn('Failed to save conversation:', saveError);
       }
 
-      // 답변 옵션들을 메시지로 추가
-      result.responses.forEach((response, index) => {
-        setTimeout(() => {
-          setMessages(prev => [...prev, {
-            id: Date.now() + index,
-            text: '',
-            sender: 'bot',
-            timestamp: new Date(),
-            type: 'response-option',
-            data: response
-          }]);
-        }, index * 1000);
-      });
+      // 최적 답변만 표시
+      setTimeout(() => {
+        setMessages(prev => [...prev, {
+          id: Date.now(),
+          text: '',
+          sender: 'bot',
+          timestamp: new Date(),
+          type: 'response-option',
+          data: bestResponse
+        }]);
+      }, 500);
     } catch (error) {
       console.error('Response generation failed:', error);
       setMessages(prev => [...prev, {
@@ -264,6 +292,65 @@ function HomeContent() {
     } finally {
       setIsTyping(false);
     }
+  };
+
+  // 사용자 말투에 가장 적합한 답변 선택
+  const selectBestResponse = (responses: ResponseOption[], profile: SpeechProfile): ResponseOption => {
+    if (!responses || responses.length === 0) {
+      return {
+        type: '균형형',
+        message: '좋은 생각이네요! 어떻게 하면 좋을까요?',
+        explanation: '무난한 답변입니다.',
+        risk_level: 2,
+        confidence: 0.8
+      };
+    }
+
+    // 사용자 성격에 따른 가중치 계산
+    const userRiskTolerance = calculateRiskTolerance(profile);
+    
+    // 각 답변에 점수 부여
+    const scoredResponses = responses.map(response => {
+      let score = response.confidence || 0.5;
+      
+      // 위험도와 사용자 성향 매칭
+      const riskMatch = 1 - Math.abs(response.risk_level - userRiskTolerance) / 5;
+      score += riskMatch * 0.4;
+      
+      // 말투 스타일 매칭
+      if (profile.formal_ratio > 0.7 && response.type === '안전형') score += 0.2;
+      else if (profile.formal_ratio < 0.3 && response.type === '대담형') score += 0.2;
+      else if (response.type === '균형형') score += 0.1;
+      
+      return { ...response, score };
+    });
+    
+    // 가장 높은 점수의 답변 반환
+    return scoredResponses.reduce((best, current) => 
+      current.score > best.score ? current : best
+    );
+  };
+
+  // 사용자 위험 허용도 계산
+  const calculateRiskTolerance = (profile: SpeechProfile): number => {
+    let riskLevel = 2.5; // 기본값
+    
+    // 이모티콘 사용이 많으면 더 적극적
+    if (profile.emoji_ratio > 0.5) riskLevel += 0.5;
+    
+    // 존댓말 비율이 낮으면 더 캐주얼
+    if (profile.formal_ratio < 0.3) riskLevel += 0.5;
+    
+    // 메시지 길이가 짧으면 더 직접적
+    if (profile.avg_length < 20) riskLevel += 0.3;
+    
+    // 성격 특성 고려
+    if (profile.personality_traits?.includes('활발함') || 
+        profile.personality_traits?.includes('적극적')) {
+      riskLevel += 0.4;
+    }
+    
+    return Math.min(Math.max(riskLevel, 1), 5);
   };
 
   // 메시지 전송
@@ -286,10 +373,9 @@ function HomeContent() {
     if (!user) return;
     
     try {
-      // 선택된 답변 피드백 저장
       await apiService.saveConversation({
         user_id: user.userId,
-        user_message: messages[messages.length - 2]?.text || '', // 마지막 사용자 메시지
+        user_message: messages[messages.length - 2]?.text || '',
         ai_responses: [responseData],
         selected_response_type: responseData.type,
         selected_response: responseData.message,
@@ -297,10 +383,9 @@ function HomeContent() {
         partner_relationship: partnerInfo.relationship
       });
       
-      // 선택 완료 메시지 표시
       setMessages(prev => [...prev, {
         id: Date.now(),
-        text: `✅ "${responseData.message}" 답변을 선택하셨습니다!\n\n다른 상황이 있으면 언제든 말해주세요 😊`,
+        text: `✅ 답변을 복사했어요!\n\n다른 상황이 있으면 언제든 말해주세요 😊`,
         sender: 'bot',
         timestamp: new Date()
       }]);
@@ -309,9 +394,82 @@ function HomeContent() {
     }
   };
 
+  const handleCopy = async (text: string) => {
+    try {
+      if (navigator.clipboard && window.isSecureContext) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const textArea = document.createElement('textarea');
+        textArea.value = text;
+        textArea.style.position = 'fixed';
+        textArea.style.left = '-999999px';
+        textArea.style.top = '-999999px';
+        document.body.appendChild(textArea);
+        textArea.focus();
+        textArea.select();
+        document.execCommand('copy');
+        document.body.removeChild(textArea);
+      }
+      setCopiedText(text);
+      setTimeout(() => setCopiedText(''), 2000);
+    } catch (err) {
+      console.error('복사 실패:', err);
+      alert('복사에 실패했습니다.');
+    }
+  };
+
+  const handleSelectRoom = (roomId: string, roomPartnerInfo: any) => {
+    setCurrentRoomId(roomId);
+    setPartnerInfo(roomPartnerInfo);
+    setCurrentScreen('chatbot');
+    setSidebarOpen(false);
+    setMessages([{
+      id: 1,
+      text: `안녕! ${roomPartnerInfo.name}님과의 대화를 이어가볼까요? 💕\n\n어떤 상황인지 말해주세요!`,
+      sender: 'bot',
+      timestamp: new Date()
+    }]);
+  };
+
+  const handleNewChat = () => {
+    setCurrentRoomId('');
+    // 말투 분석 없이 바로 상대방 정보 입력으로
+    setCurrentScreen('partner-info');
+    setSidebarOpen(false);
+    setMessages([]);
+    setPartnerInfo({ name: '', age: '', relationship: '', personality: '' });
+    
+    // 기본 말투 프로필 설정 (사용자가 설정하지 않은 경우)
+    if (!speechProfile) {
+      setSpeechProfile({
+        total_messages: 0,
+        formal_ratio: 0.3,
+        emoji_ratio: 0.4,
+        avg_length: 25,
+        tone: '친근함',
+        speech_style: '일반적',
+        personality_traits: ['친근함'],
+        response_examples: []
+      });
+    }
+  };
+
   // 말투 학습 화면
   const renderSpeechLearning = () => (
     <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 p-4 flex flex-col">
+      {/* 뒤로가기 버튼 */}
+      <div className="max-w-md mx-auto w-full mb-4">
+        <button
+          onClick={() => setCurrentScreen('welcome')}
+          className="flex items-center space-x-2 text-purple-600 hover:text-purple-800 transition-colors"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+          </svg>
+          <span className="text-sm font-medium">뒤로가기</span>
+        </button>
+      </div>
+      
       <div className="flex-1 flex flex-col justify-center max-w-md mx-auto w-full">
         <div className="text-center mb-8">
           <div className="w-20 h-20 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full mx-auto mb-4 flex items-center justify-center">
@@ -420,24 +578,34 @@ function HomeContent() {
             </div>
             {/* 업로드 상태 표시 */}
             {uploadStatus === 'uploading' && (
-              <div className="text-xs text-blue-600 mt-2 text-center flex items-center justify-center space-x-2">
-                <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
-                <span>파일 분석 중...</span>
+              <div className="text-xs text-blue-600 mt-2 text-center">
+                <div className="backdrop-blur-md bg-blue-50/50 rounded-xl p-3 border border-blue-200">
+                  <div className="flex items-center justify-center space-x-2 mb-2">
+                    <div className="w-4 h-4 border-2 border-blue-600 border-t-transparent rounded-full animate-spin"></div>
+                    <span className="font-medium">파일 분석 중...</span>
+                  </div>
+                  <div className="flex justify-center space-x-1">
+                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce"></div>
+                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-1.5 h-1.5 bg-blue-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  </div>
+                </div>
               </div>
             )}
             {uploadStatus === 'success' && (
-              <div className="text-xs text-green-600 mt-2 text-center flex items-center justify-center space-x-1">
-                <span>✅</span>
-                <span>분석 완료! 다음 단계로 이동합니다...</span>
+              <div className="mt-2">
+                <SuccessMessage message="분석이 완료되었어요! 잠시 후 다음 단계로 이동합니다." />
               </div>
             )}
-            {uploadStatus === 'error' && (
-              <div className="text-xs text-red-600 mt-2 text-center">
-                <div className="flex items-center justify-center space-x-1 mb-1">
-                  <span>❌</span>
-                  <span>업로드 실패</span>
-                </div>
-                <p className="text-red-500">{uploadError}</p>
+            {uploadStatus === 'error' && uploadError && (
+              <div className="mt-2">
+                <ErrorMessage 
+                  message={uploadError}
+                  onRetry={() => {
+                    setUploadStatus('idle');
+                    setUploadError('');
+                  }}
+                />
               </div>
             )}
             {uploadedFile && uploadStatus === 'idle' && (
@@ -450,7 +618,8 @@ function HomeContent() {
           <button
             onClick={analyzeSpeech}
             disabled={!speechData.trim() || isAnalyzing || uploadStatus === 'uploading'}
-            className="w-full px-6 py-3 bg-purple-600 text-white rounded-2xl hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all duration-300 shadow-lg"
+            className="w-full px-6 py-3 bg-purple-600 text-white rounded-2xl hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed font-medium transition-all duration-300 shadow-lg focus:ring-2 focus:ring-purple-500 focus:ring-offset-2"
+            aria-label="말투 분석 시작"
           >
             {isAnalyzing || uploadStatus === 'uploading' ? '분석 중...' : '말투 분석하고 다음으로 →'}
           </button>
@@ -554,7 +723,7 @@ function HomeContent() {
 
           <div className="flex space-x-3 mt-6">
             <button
-              onClick={() => setCurrentScreen('speech-learning')}
+              onClick={() => setCurrentScreen('welcome')}
               className="flex-1 px-4 py-3 bg-gray-300 text-gray-700 rounded-xl hover:bg-gray-400 transition-colors"
             >
               ← 이전
@@ -596,7 +765,7 @@ function HomeContent() {
 
   // 채팅 화면
   const renderChatbot = () => (
-    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 flex flex-col">
+    <div className="h-full flex flex-col">
       {/* 헤더 */}
       <div className="backdrop-blur-lg bg-white/20 border-b border-white/30 p-4">
         <div className="flex items-center justify-between max-w-2xl mx-auto">
@@ -610,21 +779,79 @@ function HomeContent() {
             </div>
           </div>
           <div className="flex items-center space-x-3">
-            <span className="text-sm text-purple-600">
-              {user?.signInDetails?.loginId || '사용자'}
-            </span>
             <button
-              onClick={() => setCurrentScreen('partner-info')}
-              className="text-purple-600 hover:text-purple-800 text-sm"
+              onClick={() => setSidebarOpen(true)}
+              className="lg:hidden p-2 text-purple-600 hover:text-purple-800 transition-colors rounded-lg hover:bg-white/20"
             >
-              설정
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+              </svg>
             </button>
-            <button
-              onClick={signOut}
-              className="text-red-600 hover:text-red-800 text-sm"
-            >
-              로그아웃
-            </button>
+            
+            {/* 사용자 메뉴 */}
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center space-x-2 p-2 rounded-xl bg-white/20 hover:bg-white/30 transition-all duration-200 border border-white/30"
+              >
+                <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">
+                    {(user?.signInDetails?.loginId || '사용자')[0].toUpperCase()}
+                  </span>
+                </div>
+                <span className="text-sm font-medium text-purple-800 hidden sm:block">
+                  {user?.signInDetails?.loginId || '사용자'}
+                </span>
+                <svg 
+                  className={`w-4 h-4 text-purple-600 transition-transform duration-200 ${
+                    userMenuOpen ? 'rotate-180' : ''
+                  }`} 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {/* 드롭다운 메뉴 */}
+              {userMenuOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white/90 backdrop-blur-lg rounded-xl shadow-lg border border-white/50 py-2 z-50">
+                  <div className="px-4 py-2 border-b border-gray-200/50">
+                    <p className="text-sm font-medium text-gray-800">
+                      {user?.signInDetails?.loginId || '사용자'}
+                    </p>
+                    <p className="text-xs text-gray-600">Love Q 사용자</p>
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      setShowProfile(true);
+                      setUserMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-purple-50 transition-colors flex items-center space-x-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <span>프로필 보기</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      signOut();
+                      setUserMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center space-x-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                    </svg>
+                    <span>로그아웃</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -638,47 +865,12 @@ function HomeContent() {
               className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
             >
               {message.type === 'response-option' && message.data ? (
-                // 응답 옵션 카드 형태로 표시
                 <div className="w-full max-w-lg">
-                  <div className="backdrop-blur-md bg-white/40 border border-white/50 rounded-2xl p-4 mb-2">
-                    {/* 타입 헤더 */}
-                    <div className="flex items-center justify-between mb-3">
-                      <div className="flex items-center space-x-2">
-                        <span className="text-lg">{message.data.emoji || getTypeEmoji(message.data.type)}</span>
-                        <span className="font-bold text-gray-800">{message.data.type}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-xs">
-                        <span className={`px-2 py-1 rounded-full ${getRiskColor(message.data.risk_level)}`}>
-                          위험도 {message.data.risk_level}/5
-                        </span>
-                        <span className="px-2 py-1 bg-blue-100 text-blue-700 rounded-full">
-                          신뢰도 {Math.round(message.data.confidence * 100)}%
-                        </span>
-                      </div>
-                    </div>
-                    
-                    {/* 답변 내용 */}
-                    <div className="bg-white/60 rounded-xl p-3 mb-3">
-                      <p className="text-gray-800 font-medium">"{message.data.message}"</p>
-                    </div>
-                    
-                    {/* 설명 */}
-                    <div className="text-sm text-gray-700">
-                      <span className="font-medium">💡 선택 이유:</span>
-                      <p className="mt-1">{message.data.explanation}</p>
-                    </div>
-                    
-                    {/* 복사 및 선택 버튼 */}
-                    <div className="flex space-x-2 mt-3">
-                      <CopyButton text={message.data.message} />
-                      <button
-                        onClick={() => handleResponseSelection(message.data)}
-                        className="flex-1 py-2 bg-green-100 hover:bg-green-200 text-green-700 rounded-lg text-sm font-medium transition-colors"
-                      >
-                        ✅ 이 답변 선택
-                      </button>
-                    </div>
-                  </div>
+                  <ResponseCard
+                    response={message.data}
+                    onSelect={handleResponseSelection}
+                    onCopy={handleCopy}
+                  />
                 </div>
               ) : (
                 // 일반 메시지
@@ -703,10 +895,13 @@ function HomeContent() {
           {isTyping && (
             <div className="flex justify-start">
               <div className="backdrop-blur-md bg-white/40 border border-white/50 px-4 py-3 rounded-2xl">
-                <div className="flex space-x-1">
-                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
-                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
-                  <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-sm text-purple-600 font-medium">Love Q가 답변을 생각하고 있어요</span>
+                  <div className="flex space-x-1">
+                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce"></div>
+                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{animationDelay: '0.1s'}}></div>
+                    <div className="w-2 h-2 bg-purple-400 rounded-full animate-bounce" style={{animationDelay: '0.2s'}}></div>
+                  </div>
                 </div>
               </div>
             </div>
@@ -739,15 +934,165 @@ function HomeContent() {
   );
 
   // 화면 렌더링
-  switch (currentScreen) {
-    case 'speech-learning':
-      return renderSpeechLearning();
-    case 'partner-info':
-      return renderPartnerInfo();
-    case 'chatbot':
-      return renderChatbot();
-    default:
-      return renderSpeechLearning();
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-pink-50 to-purple-50 flex">
+      {/* 사이드바 */}
+      <div className={`fixed inset-y-0 left-0 z-50 transform transition-transform duration-300 ease-in-out ${
+        sidebarOpen ? 'translate-x-0' : '-translate-x-full'
+      } lg:relative lg:translate-x-0 lg:block`}>
+        <ChatRoomManager 
+          onSelectRoom={handleSelectRoom}
+          onNewChat={handleNewChat}
+          currentRoomId={currentRoomId}
+          collapsed={sidebarCollapsed}
+          onToggleCollapse={() => setSidebarCollapsed(!sidebarCollapsed)}
+        />
+      </div>
+      
+      {/* 오버레이 (모바일) */}
+      {sidebarOpen && (
+        <div 
+          className="fixed inset-0 bg-black/50 z-40 lg:hidden"
+          onClick={() => setSidebarOpen(false)}
+        />
+      )}
+      
+      {/* 메인 컨텐츠 */}
+      <div className="flex-1 flex flex-col">
+        {currentScreen === 'welcome' && renderWelcome()}
+        {currentScreen === 'speech-learning' && renderSpeechLearning()}
+        {currentScreen === 'partner-info' && renderPartnerInfo()}
+        {currentScreen === 'chatbot' && renderChatbot()}
+      </div>
+      
+      {showProfile && (
+        <UserProfile
+          onClose={() => setShowProfile(false)}
+          onUpdateProfile={(newData) => {
+            setSpeechProfile(prev => ({ ...prev, ...newData }));
+          }}
+          speechProfile={speechProfile}
+        />
+      )}
+    </div>
+  );
+
+  // 웰컴 화면
+  function renderWelcome() {
+    return (
+      <div className="flex flex-col items-center justify-center p-8 h-full">
+        {/* 헤더 */}
+        <div className="flex items-center justify-between w-full max-w-4xl mb-8">
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="lg:hidden p-2 text-purple-600 hover:text-purple-800 transition-colors"
+          >
+            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+          
+          <div className="flex items-center space-x-4 ml-auto">
+            {/* 사용자 메뉴 */}
+            <div className="relative" ref={userMenuRef}>
+              <button
+                onClick={() => setUserMenuOpen(!userMenuOpen)}
+                className="flex items-center space-x-2 p-2 rounded-xl bg-white/20 hover:bg-white/30 transition-all duration-200 border border-white/30"
+              >
+                <div className="w-8 h-8 bg-gradient-to-r from-purple-400 to-pink-400 rounded-full flex items-center justify-center">
+                  <span className="text-white text-sm font-medium">
+                    {(user?.signInDetails?.loginId || '사용자')[0].toUpperCase()}
+                  </span>
+                </div>
+                <span className="text-sm font-medium text-purple-800 hidden sm:block">
+                  {user?.signInDetails?.loginId || '사용자'}
+                </span>
+                <svg 
+                  className={`w-4 h-4 text-purple-600 transition-transform duration-200 ${
+                    userMenuOpen ? 'rotate-180' : ''
+                  }`} 
+                  fill="none" 
+                  stroke="currentColor" 
+                  viewBox="0 0 24 24"
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                </svg>
+              </button>
+              
+              {/* 드롭다운 메뉴 */}
+              {userMenuOpen && (
+                <div className="absolute right-0 mt-2 w-48 bg-white/90 backdrop-blur-lg rounded-xl shadow-lg border border-white/50 py-2 z-50">
+                  <div className="px-4 py-2 border-b border-gray-200/50">
+                    <p className="text-sm font-medium text-gray-800">
+                      {user?.signInDetails?.loginId || '사용자'}
+                    </p>
+                    <p className="text-xs text-gray-600">Love Q 사용자</p>
+                  </div>
+                  
+                  <button
+                    onClick={() => {
+                      setShowProfile(true);
+                      setUserMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-gray-700 hover:bg-purple-50 transition-colors flex items-center space-x-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                    </svg>
+                    <span>프로필 보기</span>
+                  </button>
+                  
+                  <button
+                    onClick={() => {
+                      signOut();
+                      setUserMenuOpen(false);
+                    }}
+                    className="w-full px-4 py-2 text-left text-sm text-red-600 hover:bg-red-50 transition-colors flex items-center space-x-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013 3v1" />
+                    </svg>
+                    <span>로그아웃</span>
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+        
+        {/* 메인 컨텐츠 */}
+        <div className="text-center max-w-md">
+          <div className="w-20 h-20 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full mx-auto mb-6 flex items-center justify-center">
+            <span className="text-3xl">💕</span>
+          </div>
+          <h1 className="text-3xl font-bold text-purple-800 mb-4">Love Q v2.0</h1>
+          <p className="text-purple-600 mb-8">
+            사이드바에서 대화방을 선택하거나<br/>
+            새로운 대화를 시작해보세요!
+          </p>
+          
+          <div className="space-y-3">
+            <button
+              onClick={handleNewChat}
+              className="w-full py-3 bg-purple-600 text-white rounded-xl hover:bg-purple-700 transition-colors font-medium"
+            >
+              ✨ 새 대화 시작하기
+            </button>
+            
+            <button
+              onClick={() => setSidebarOpen(true)}
+              className="w-full py-3 bg-white/60 text-purple-700 rounded-xl hover:bg-white/80 transition-colors font-medium border border-purple-200 lg:hidden"
+            >
+              💬 대화방 보기
+            </button>
+            
+            <p className="text-xs text-purple-600 text-center">
+              말투 분석은 프로필에서 설정할 수 있어요 😊
+            </p>
+          </div>
+        </div>
+      </div>
+    );
   }
 }
 

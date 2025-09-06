@@ -22,20 +22,19 @@ Frontend (Next.js) → Amplify Auth → API Gateway → Lambda Functions
 
 ## 🚀 빠른 시작
 
-### 1. 백엔드 배포
+### 📋 단계별 배포
 ```bash
+# 1. 백엔드 배포 (Lambda + API Gateway + Cognito + DSQL)
 ./deploy-backend.sh dev us-east-1
-```
 
-### 2. 환경변수 설정
-```bash
+# 2. 데이터베이스 초기화
+./init-database.sh dev us-east-1
+
+# 3. 환경변수 설정
 ./setup-env.sh dev us-east-1
-```
 
-### 3. 로컬 개발
-```bash
-cd frontend
-npm run dev
+# 4. 로컬 개발
+cd frontend && npm run dev
 ```
 
 ### 4. 프로덕션 배포 (Amplify)
@@ -87,9 +86,10 @@ amplify publish
 │   ├── src/
 │   │   ├── lambda/                   # Lambda 함수들 v2.0
 │   │   │   ├── speech_analysis.py    # 말투 + 감정 분석
-│   │   │   ├── chat_analysis.py      # 감정 기반 답변 생성
+│   │   │   ├── chat_analysis.py      # 맞춤 단일 답변
 │   │   │   ├── emotion_analysis.py   # Comprehend 전용
 │   │   │   ├── auth_middleware.py    # JWT + Cognito 인증
+│   │   │   ├── file_upload.py        # 파일 업로드 처리
 │   │   │   ├── conversation_history.py # 대화 기록 관리
 │   │   │   └── user_profile_manager.py # 사용자 프로필
 │   │   └── database/
@@ -321,14 +321,7 @@ NEXT_PUBLIC_AWS_REGION=us-east-1
 NEXT_PUBLIC_USE_MOCK=false
 ```
 
-## 📊 사용 통계 v2.0
 
-- 평균 응답 시간: 2-3초
-- 말투 분석 정확도: 90%+ (감정 분석 추가)
-- 감정 분석 정확도: 85%+ (Comprehend 활용)
-- 사용자 만족도: 4.5/5.0 (개인화 개선)
-- 답변 성공률: 78% (피드백 기반)
-- 월간 활성 사용자: 1,500+ (인증 시스템 도입)
 
 ## 🤝 기여하기
 
