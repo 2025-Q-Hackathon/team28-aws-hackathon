@@ -13,7 +13,7 @@ const renderChatRooms = () => (
         <div className="w-20 h-20 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full mx-auto mb-6 flex items-center justify-center">
           <span className="text-3xl">💕</span>
         </div>
-        <h1 className="text-3xl font-bold text-purple-800 mb-4">Love Q v2.0</h1>
+        <h1 className="text-3xl font-bold text-purple-800 mb-4">Love Q</h1>
         <p className="text-purple-600 mb-8">
           왼쪽에서 대화방을 선택하거나<br/>
           새로운 대화를 시작해보세요!

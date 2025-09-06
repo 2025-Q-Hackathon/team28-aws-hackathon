@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useAuth } from '../lib/auth-context';
+import { apiService } from '../services/api';
 
 interface ChatRoom {
   id: string;
@@ -19,9 +20,10 @@ interface ChatRoomManagerProps {
   currentRoomId?: string;
   collapsed?: boolean;
   onToggleCollapse?: () => void;
+  refreshTrigger?: number;
 }
 
-export default function ChatRoomManager({ onSelectRoom, onNewChat, currentRoomId, collapsed = false, onToggleCollapse }: ChatRoomManagerProps) {
+export default function ChatRoomManager({ onSelectRoom, onNewChat, currentRoomId, collapsed = false, onToggleCollapse, refreshTrigger }: ChatRoomManagerProps) {
   const { user } = useAuth();
   const [rooms, setRooms] = useState<ChatRoom[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -29,38 +31,27 @@ export default function ChatRoomManager({ onSelectRoom, onNewChat, currentRoomId
   useEffect(() => {
     if (user) {
       loadChatRooms();
+    } else {
+      setRooms([]);
+      setIsLoading(false);
     }
-  }, [user]);
+  }, [user, refreshTrigger]);
 
   const loadChatRooms = async () => {
     try {
-      // API 호출로 채팅방 목록 로드
-      // const response = await apiService.getChatRooms(user.userId);
-      // setRooms(response.rooms);
-      
-      // 임시 데이터
-      setRooms([
-        {
-          id: '1',
-          name: '민수와의 대화',
-          partner_name: '민수',
-          partner_relationship: '썸',
-          last_message: '영화 보자고 했는데 뭐라고 답할까?',
-          updated_at: '2024-01-15T10:30:00Z',
-          message_count: 15
-        },
-        {
-          id: '2', 
-          name: '지은이와의 대화',
-          partner_name: '지은',
-          partner_relationship: '친구',
-          last_message: '오늘 카페 갈까?',
-          updated_at: '2024-01-14T15:20:00Z',
-          message_count: 8
-        }
-      ]);
+      if (user) {
+        console.log('Loading chat rooms for user:', user.userId);
+        const response = await apiService.getChatRooms(user.userId);
+        console.log('Chat rooms response:', response);
+        
+        // 새로 생성된 채팅방이 있는지 확인
+        const existingRooms = response.rooms || [];
+        setRooms(existingRooms);
+      }
     } catch (error) {
       console.error('Failed to load chat rooms:', error);
+      // API 오류 시 빈 배열로 설정
+      setRooms([]);
     } finally {
       setIsLoading(false);
     }

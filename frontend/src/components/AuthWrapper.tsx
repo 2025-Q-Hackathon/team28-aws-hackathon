@@ -23,7 +23,7 @@ export default function AuthWrapper({ children }: AuthWrapperProps) {
             <div className="w-20 h-20 bg-gradient-to-r from-pink-400 to-purple-500 rounded-full mx-auto mb-4 flex items-center justify-center">
               <span className="text-3xl">💕</span>
             </div>
-            <h1 className="text-3xl font-bold text-purple-800 mb-2">Love Q v2.0</h1>
+            <h1 className="text-3xl font-bold text-purple-800 mb-2">Love Q</h1>
             <p className="text-purple-600">AI 연애 답변 도우미</p>
           </div>
           

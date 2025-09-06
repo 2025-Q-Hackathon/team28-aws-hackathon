@@ -55,9 +55,12 @@ export interface ChatAnalysisRequest {
   user_style: SpeechAnalysisResponse;
   partner_info?: {
     name: string;
-    age: string;
+    age?: string;
     relationship: string;
-    personality: string;
+    personality?: string;
+    description: string;
+    interests?: string;
+    communication_style?: string;
   };
 }
 
@@ -130,6 +133,82 @@ export const apiService = {
   getConversationHistory: async (userId: string, limit = 20, offset = 0) => {
     const client = await createAuthenticatedClient();
     const response = await client.get(`/conversation-history?user_id=${userId}&limit=${limit}&offset=${offset}`);
+    return response.data;
+  },
+
+  // 상대방 프로필 관리
+  createPartnerProfile: async (data: {
+    user_id: string;
+    name: string;
+    relationship: string;
+    description: string;
+    interests?: string;
+    communication_style?: string;
+  }) => {
+    const client = await createAuthenticatedClient();
+    const response = await client.post('/partner-profile', data);
+    return response.data;
+  },
+
+  getPartnerProfiles: async (userId: string) => {
+    const client = await createAuthenticatedClient();
+    const response = await client.get(`/partner-profile?user_id=${userId}`);
+    return response.data;
+  },
+
+  updatePartnerProfile: async (data: {
+    profile_id: string;
+    name?: string;
+    relationship?: string;
+    description?: string;
+    interests?: string;
+    communication_style?: string;
+  }) => {
+    const client = await createAuthenticatedClient();
+    const response = await client.put('/partner-profile', data);
+    return response.data;
+  },
+
+  deletePartnerProfile: async (profileId: string) => {
+    const client = await createAuthenticatedClient();
+    const response = await client.delete('/partner-profile', {
+      data: { profile_id: profileId }
+    });
+    return response.data;
+  },
+
+  // 대화방 관리
+  getChatRooms: async (userId: string) => {
+    const client = await createAuthenticatedClient();
+    const response = await client.get(`/chat-rooms?user_id=${userId}`);
+    return response.data;
+  },
+
+  createChatRoom: async (data: {
+    user_id: string;
+    partner_name: string;
+    partner_relationship: string;
+  }) => {
+    const client = await createAuthenticatedClient();
+    const response = await client.post('/chat-rooms', data);
+    return response.data;
+  },
+
+  updateChatRoom: async (data: {
+    room_id: string;
+    last_message?: string;
+    message_count?: number;
+  }) => {
+    const client = await createAuthenticatedClient();
+    const response = await client.put('/chat-rooms', data);
+    return response.data;
+  },
+
+  deleteChatRoom: async (roomId: string) => {
+    const client = await createAuthenticatedClient();
+    const response = await client.delete('/chat-rooms', {
+      data: { room_id: roomId }
+    });
     return response.data;
   },
 
