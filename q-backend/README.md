@@ -16,16 +16,19 @@ Frontend (Next.js) → API Gateway → Lambda Functions → DSQL/S3
 q-backend/
 ├── src/
 │   ├── lambda/
-│   │   ├── chat_analysis.py      # 말투 분석 + AI 답변 생성
-│   │   ├── file_upload.py        # 카톡 파일 업로드 처리
-│   │   └── user_profile.py       # 사용자 프로필 관리
+│   │   ├── speech_analysis.py        # 말투 + 감정 분석
+│   │   ├── chat_analysis.py          # AI 답변 생성 (감정 기반)
+│   │   ├── emotion_analysis.py       # Comprehend 감정 분석
+│   │   ├── auth_middleware.py        # JWT + Cognito 인증
+│   │   ├── conversation_history.py   # 대화 기록 저장/조회
+│   │   └── user_profile_manager.py   # 사용자 프로필 관리
 │   ├── database/
-│   │   └── schema.sql            # DSQL 스키마
-│   └── requirements.txt          # Python 의존성
+│   │   └── schema.sql                # DSQL 스키마 v2.0
+│   └── requirements.txt              # Python 의존성
 ├── infrastructure/
-│   ├── love-q-serverless.yaml    # CloudFormation 템플릿
-│   └── deploy-serverless.sh      # 인프라 배포
-└── deploy-lambda.sh              # Lambda 함수 배포
+│   ├── love-q-serverless.yaml        # CloudFormation 템플릿
+│   └── README.md                     # 인프라 설명
+└── README.md                         # 백엔드 설명
 ```
 
 ## 🚀 배포 방법
@@ -80,26 +83,50 @@ POST /api/users/{user_id}/profile
 POST /api/users/{user_id}/feedback
 ```
 
-## 🤖 AI 기능
+## 🤖 AI 기능 v2.0
 
-**말투 분석**
+**말투 분석 (speech_analysis.py)**
 - 존댓말/반말 비율 계산
 - 이모티콘 사용 빈도 분석
 - 평균 메시지 길이 측정
+- 성격 특성 추출
 
-**답변 생성 (AWS Bedrock)**
+**감정 분석 (emotion_analysis.py + Comprehend)**
+- 감정 상태 분석 (POSITIVE/NEGATIVE/NEUTRAL/MIXED)
+- 핵심 구문 추출
+- 개체명 인식
+- 감정 강도 계산
+
+**답변 생성 (chat_analysis.py + Bedrock)**
 - 안전형: 무난하고 안전한 답변
 - 표준형: 적당한 관심 표현
 - 대담형: 적극적인 호감 표현
+- **감정 상태 기반 맞춤 답변**
 - 각 답변마다 설명 + 리스크 레벨 + 신뢰도 점수
+
+**인증 & 세션 관리 (auth_middleware.py)**
+- JWT 토큰 검증
+- Cognito User Pool 연동
+- 세션 관리 및 토큰 갱신
+
+**대화 기록 & 개인화**
+- 대화 히스토리 저장 (conversation_history.py)
+- 사용자 프로필 관리 (user_profile_manager.py)
+- 답변 성공률 추적
+- 개인화된 대시보드
 
 ## 💾 데이터베이스 (DSQL)
 
-**테이블 구조**
-- `user_profiles`: 사용자 말투 프로필
-- `response_feedback`: 답변 피드백 데이터
-- `user_credits`: 크레딧 시스템
-- `usage_stats`: 사용 통계
+**테이블 구조 v2.0**
+- `users`: 사용자 기본 정보 (Cognito 연동)
+- `user_profiles`: 사용자 말투 프로필 (확장)
+- `emotion_analysis`: 감정 분석 결과
+- `conversations`: 대화 기록 저장
+- `user_sessions`: 세션 관리
+- `response_feedback`: 답변 피드백 데이터 (확장)
+- `user_credits`: 크레딧 시스템 (확장)
+- `usage_stats`: 사용 통계 (확장)
+- `user_dashboard`: 대시보드 뷰
 
 **DSQL 특징**
 - PostgreSQL 호환 문법

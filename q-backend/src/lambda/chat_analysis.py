@@ -48,7 +48,7 @@ def lambda_handler(event, context):
         }
 
 def generate_responses(context: str, situation: str, user_style: Dict, partner_info: Dict) -> List[Dict]:
-    """AI 답변 3안 생성"""
+    """AI 답변 3안 생성 (감정 분석 포함)"""
     
     # 파트너 정보 문자열 생성
     partner_context = ""
@@ -59,10 +59,24 @@ def generate_responses(context: str, situation: str, user_style: Dict, partner_i
     if partner_info.get('personality'):
         partner_context += f"성격: {partner_info['personality']}\n"
     
+    # 감정 데이터 추출
+    emotion_data = user_style.get('emotion_data', {})
+    sentiment = emotion_data.get('sentiment', 'NEUTRAL')
+    sentiment_confidence = emotion_data.get('sentiment_confidence', 0.5)
+    personality_traits = user_style.get('personality_traits', [])
+    
+    # 감정 상태를 고려한 프롬프트
+    emotion_context = f"""
+사용자 감정 상태:
+- 전반적 감정: {sentiment} (신뢰도: {sentiment_confidence:.1%})
+- 성격 특성: {', '.join(personality_traits) if personality_traits else '일반적'}
+"""
+    
     prompt = f"""
 당신은 연애 상담 전문가입니다. 다음 상황에서 자연스러운 답변 3가지를 생성해주세요.
 
 {partner_context}
+{emotion_context}
 대화 맥락: {context}
 현재 상황: {situation}
 
@@ -70,13 +84,14 @@ def generate_responses(context: str, situation: str, user_style: Dict, partner_i
 - 존댓말 비율: {user_style.get('formal_ratio', 0.3):.1%}
 - 이모티콘 사용: {user_style.get('emoji_ratio', 0.2):.1f}개/메시지
 - 평균 메시지 길이: {user_style.get('avg_length', 20):.0f}자
+- 말투 스타일: {user_style.get('speech_style', 'casual')}
 
-3가지 답변을 생성해주세요:
+감정 상태를 고려하여 3가지 답변을 생성해주세요:
 1. 안전형: 무난하고 안전한 답변
 2. 표준형: 적당히 관심을 보이는 답변  
 3. 대담형: 적극적이고 호감을 드러내는 답변
 
-각 답변마다 왜 이 답변이 적합한지, 어떤 리스크가 있는지 설명해주세요.
+각 답변은 사용자의 감정 상태와 성격 특성을 반영해야 합니다.
 
 JSON 형식으로 응답:
 {{
@@ -122,54 +137,107 @@ JSON 형식으로 응답:
     except Exception as e:
         print(f"Bedrock API error: {e}")
     
-    # 상황별 맞춤 기본 응답 (API 실패 시)
+    # 감정 상태를 고려한 상황별 맞춤 기본 응답 (API 실패 시)
+    emotion_data = user_style.get('emotion_data', {})
+    sentiment = emotion_data.get('sentiment', 'NEUTRAL')
+    
     if "연락" in situation and "없어" in situation:
+        if sentiment == 'NEGATIVE':
+            return [
+                {
+                    "type": "안전형",
+                    "message": "안녕! 괜찮아?",
+                    "explanation": "부정적 감정을 고려해 걱정을 표현하는 안전한 접근입니다.",
+                    "risk_level": 1,
+                    "confidence": 0.9
+                },
+                {
+                    "type": "표준형",
+                    "message": "요즘 힘든 일 있었어? 괜찮으면 얘기해줘",
+                    "explanation": "상대방의 상황을 이해하려 하며 지지를 표현합니다.",
+                    "risk_level": 2,
+                    "confidence": 0.8
+                },
+                {
+                    "type": "대담형",
+                    "message": "연락 없어서 걱정됐어 ㅠㅠ 무슨 일 있었어?",
+                    "explanation": "직접적인 걱정과 관심을 표현하여 감정적 지지를 제공합니다.",
+                    "risk_level": 3,
+                    "confidence": 0.7
+                }
+            ]
+        else:
+            return [
+                {
+                    "type": "안전형",
+                    "message": "안녕! 잘 지내?",
+                    "explanation": "자연스럽고 부담 없는 안부 인사로 대화를 재개합니다.",
+                    "risk_level": 1,
+                    "confidence": 0.9
+                },
+                {
+                    "type": "표준형",
+                    "message": "요즘 어떻게 지내? 바빴나?",
+                    "explanation": "관심을 보이면서 상대방의 상황을 이해하려는 모습을 보입니다.",
+                    "risk_level": 2,
+                    "confidence": 0.8
+                },
+                {
+                    "type": "대담형",
+                    "message": "연락 없어서 궁금했어! 뭐하고 지냈어?",
+                    "explanation": "적극적인 관심을 표현하며 대화를 이끌어갑니다.",
+                    "risk_level": 3,
+                    "confidence": 0.7
+                }
+            ]
+    
+    # 감정 상태를 고려한 기본 응답
+    if sentiment == 'POSITIVE':
         return [
             {
                 "type": "안전형",
-                "message": "안녕! 잘 지내?",
-                "explanation": "자연스럽고 부담 없는 안부 인사로 대화를 재개합니다.",
+                "message": "그렇구나! 재밌겠다 😊",
+                "explanation": "긍정적 감정에 맞춰 밝고 무난한 반응을 보입니다.",
                 "risk_level": 1,
                 "confidence": 0.9
             },
             {
                 "type": "표준형",
-                "message": "요즘 어떻게 지내? 바빴나?",
-                "explanation": "관심을 보이면서 상대방의 상황을 이해하려는 모습을 보입니다.",
+                "message": "오 좋은데? 나도 관심있어!",
+                "explanation": "긍정적 에너지에 맞춰 적극적인 관심을 표현합니다.",
                 "risk_level": 2,
                 "confidence": 0.8
             },
             {
                 "type": "대담형",
-                "message": "연락 없어서 걱정했어 ㅠㅠ 괜찮아?",
-                "explanation": "직접적으로 걱정했다는 감정을 표현하여 관심을 드러냅니다.",
+                "message": "완전 좋아! 같이 해볼까? 😍",
+                "explanation": "높은 텐션에 맞춰 적극적인 호감과 참여 의사를 표현합니다.",
+                "risk_level": 4,
+                "confidence": 0.7
+            }
+        ]
+    else:
+        return [
+            {
+                "type": "안전형",
+                "message": "그렇구나~ 어떤 느낌이야?",
+                "explanation": "중립적이고 안전한 반응으로 상대방의 감정을 탐색합니다.",
+                "risk_level": 1,
+                "confidence": 0.9
+            },
+            {
+                "type": "표준형",
+                "message": "흥미롭네! 더 자세히 얘기해줄래?",
+                "explanation": "적당한 관심을 보이며 대화를 이어가려 합니다.",
+                "risk_level": 2,
+                "confidence": 0.8
+            },
+            {
+                "type": "대담형",
+                "message": "오 신기하다! 나도 알고 싶어 😊",
+                "explanation": "적극적인 호기심을 표현하며 관심을 드러냅니다.",
                 "risk_level": 3,
                 "confidence": 0.7
             }
         ]
-    
-    # 기본 응답
-    return [
-        {
-            "type": "안전형",
-            "message": "그렇구나! 재밌겠다 😊",
-            "explanation": "무난하고 안전한 반응으로 부담을 주지 않습니다.",
-            "risk_level": 1,
-            "confidence": 0.9
-        },
-        {
-            "type": "표준형",
-            "message": "오 좋은데? 나도 관심있어!",
-            "explanation": "적당한 관심을 표현하며 대화를 이어갑니다.",
-            "risk_level": 2,
-            "confidence": 0.8
-        },
-        {
-            "type": "대담형",
-            "message": "완전 좋아! 같이 해볼까? 😍",
-            "explanation": "적극적인 호감을 드러내며 함께하고 싶다는 의사를 표현합니다.",
-            "risk_level": 4,
-            "confidence": 0.7
-        }
-    ]
 
